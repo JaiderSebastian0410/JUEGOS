@@ -219,6 +219,8 @@
   let scoreMilestone = 0;
   let unlockedEnemies = 1;
   let isRecordBroken = false;
+  let currentMilestoneTarget = 1600;
+  let currentUnlockInterval = 700;
 
   let selectedDifficulty = 'progresivo';
   let isPractice = false;
@@ -561,8 +563,8 @@
   function spawnEnemies() {
     if (frame % Math.floor(spawnRate) !== 0) return;
 
-    // Unlock new enemies every ENEMY_UNLOCK_INTERVAL points
-    if (score >= unlockedEnemies * ENEMY_UNLOCK_INTERVAL && unlockedEnemies < ENEMY_TYPES.length) {
+    // Unlock new enemies
+    if (score >= unlockedEnemies * currentUnlockInterval && unlockedEnemies < ENEMY_TYPES.length) {
       unlockedEnemies++;
       showAnnouncement('NUEVA AMENAZA: ' + ENEMY_TYPES[unlockedEnemies - 1].name.toUpperCase());
     }
@@ -603,7 +605,6 @@
      ========================================================= */
   function updateEnemies() {
     const alive = [];
-
     for (const e of enemies) {
       const dx = player.x - e.x;
       const dy = player.y - e.y;
@@ -614,10 +615,20 @@
         e.y += (dy / dist) * e.speed;
       }
 
-      // Enemy spell shooting (Pulsar and Overlord)
-      if (e.name === 'Pulsar' || e.name === 'Overlord') {
-        e.spellTimer++;
-        if (e.spellTimer > 180) { // Every 3 seconds
+      // Enemy AI: Spells vs Bullets
+      e.spellTimer++;
+      if (e.name === 'Overlord') { // The "UFO" / Final Enemy
+        if (e.spellTimer > 240) { // Slower fire (every 4 seconds)
+          bullets.push({
+            x: e.x, y: e.y,
+            dx: -(dx / dist) * 3, dy: -(dy / dist) * 3,
+            color: '#ff3366', // Red bullet (hurts life)
+            source: 'enemy_bullet'
+          });
+          e.spellTimer = 0;
+        }
+      } else if (e.name === 'Pulsar' || e.name === 'Void' || e.name === 'Phantom') { 
+        if (e.spellTimer > 200) { 
           bullets.push({
             x: e.x, y: e.y,
             dx: -(dx / dist) * 4, dy: -(dy / dist) * 4,
@@ -633,47 +644,57 @@
       // Bullet collision
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
-        if (b.source === 'enemy_spell') {
-          // Check collision with player
+        
+        // Enemy projectiles vs player
+        if (b.source.startsWith('enemy_')) {
           const pdx = player.x - b.x;
           const pdy = player.y - b.y;
           if (Math.hypot(pdx, pdy) < player.size) {
             bullets.splice(i, 1);
             if (player.powers.shield <= 0) {
-              const type = Math.random() > 0.5 ? 'slow' : 'disable';
-              player.debuffs[type] = 180; // 3 seconds
-              showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
-              SFX.play(200, 100, 'sawtooth', 0.5, 0.4);
+              if (b.source === 'enemy_bullet') {
+                if (!isPractice) player.vida--;
+                createParticles(player.x, player.y, '#ff3366', 20);
+                shakeAmt = 15; damageFlash = 0.5;
+                SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
+              } else {
+                const type = Math.random() > 0.5 ? 'slow' : 'disable';
+                player.debuffs[type] = 180;
+                showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
+                SFX.hit();
+              }
             }
             continue;
           }
         }
 
-        if (b.source !== 'enemy_spell' && Math.abs(b.x - e.x) < e.size && Math.abs(b.y - e.y) < e.size) {
-          bullets.splice(i, 1);
-          e.hp--;
-          createParticles(b.x, b.y, '#ffffff', 4);
-          if (e.hp <= 0) {
-            dead = true;
-            let multiplier = (b.source === 'manual') ? 1.5 : 1.0;
-            multiplier *= diffMultiplier; // Difficulty modifier
-            const pts = Math.ceil((e.pts + 5) * multiplier);
-            
-            addScore(pts);
-            kills++;
-            killsMilestone++;
-            if (ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
-            createParticles(e.x, e.y, e.color, 20);
-            createFloatingText(e.x, e.y, `+${pts}`, '#f1c40f');
-            SFX.kill();
-            break;
-          } else {
-            SFX.hit();
+        // Player bullets vs enemies
+        if (b.source === 'manual' || b.source === 'auto') {
+          if (Math.abs(b.x - e.x) < e.size && Math.abs(b.y - e.y) < e.size) {
+            bullets.splice(i, 1);
+            e.hp--;
+            createParticles(b.x, b.y, '#ffffff', 4);
+            if (e.hp <= 0) {
+              dead = true;
+              let multiplier = (b.source === 'manual') ? 1.5 : 1.0;
+              multiplier *= diffMultiplier;
+              const pts = Math.ceil((e.pts + 5) * multiplier);
+              addScore(pts);
+              kills++;
+              killsMilestone++;
+              if (ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
+              createParticles(e.x, e.y, e.color, 20);
+              createFloatingText(e.x, e.y, `+${pts}`, '#f1c40f');
+              SFX.kill();
+              break;
+            } else {
+              SFX.hit();
+            }
           }
         }
       }
 
-      // Player collision
+      // Player collision directly with enemy body
       if (!dead && dist < (player.size + e.size) * 0.7) {
         if (player.powers.shield <= 0) {
           if (!isPractice) player.vida--;
@@ -682,7 +703,7 @@
           createParticles(player.x, player.y, '#ff3366', 30);
           SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
         } else {
-          const shieldPts = Math.ceil(e.pts * diffMultiplier * 0.5); // Shield kill = half points
+          const shieldPts = Math.ceil(e.pts * diffMultiplier * 0.5);
           addScore(shieldPts);
           kills++;
           killsMilestone++;
@@ -696,7 +717,6 @@
 
       if (!dead) alive.push(e);
     }
-
     enemies = alive;
   }
 
@@ -709,7 +729,7 @@
      COLLECTIBLES
      ========================================================= */
   function spawnCollectibles() {
-    if (frame > 0 && frame % 420 === 0) {
+    if (frame % 420 === 0) {
       const p = POWER_TYPES[Math.floor(Math.random() * POWER_TYPES.length)];
       powerUps.push({
         x: random(camera.x + 50, camera.x + camera.width - 50),
@@ -717,7 +737,10 @@
         type: p.type, color: p.color, time: 600,
       });
     }
-    if (frame > 0 && frame % 2200 === 0) {
+    
+    // Heart spawn probability reduced in Hardcore
+    let heartMod = (selectedDifficulty === 'hardcore') ? 4500 : 2200;
+    if (frame > 0 && frame % heartMod === 0) {
       hearts.push({
         x: random(camera.x + 50, camera.x + camera.width - 50),
         y: random(camera.y + 50, camera.y + camera.height - 150),
@@ -766,11 +789,29 @@
       createFloatingText(player.x, player.y, "❤ EXTRA!", "#ff007f");
       SFX.powerup();
     }
-    if (scoreMilestone >= SCORE_PER_MILESTONE) {
-      scoreMilestone -= SCORE_PER_MILESTONE;
+    if (scoreMilestone >= currentMilestoneTarget) {
+      scoreMilestone -= currentMilestoneTarget;
       if (gameState !== 'PLAYING') return; 
       gameState = 'CHOOSING';
-      $('levelup-menu').classList.add('active');
+      
+      // Customize LevelUp Menu for Hardcore
+      const menu = $('levelup-menu');
+      if (selectedDifficulty === 'hardcore') {
+        menu.querySelector('h1').innerText = '⚡ SOBRECARGA HARDCORE ⚡';
+        menu.querySelector('p').innerText = 'Has alcanzado los 4200 puntos. ¡Sistemas al límite!';
+        // Replace Life button text
+        const btns = menu.querySelectorAll('.btn');
+        btns[btns.length-1].innerText = '⚡ CARGAR ULTRA';
+        btns[btns.length-1].setAttribute('onclick', "choosePremiumPower('ultra')");
+      } else {
+        menu.querySelector('h1').innerText = '¡PUNTUACIÓN DESTACADA!';
+        menu.querySelector('p').innerText = 'Has alcanzado los 1600 puntos. Elige una mejora:';
+        const btns = menu.querySelectorAll('.btn');
+        btns[btns.length-1].innerText = '❤ +1 Vida';
+        btns[btns.length-1].setAttribute('onclick', "choosePremiumPower('life')");
+      }
+      
+      menu.classList.add('active');
     }
     
     // Record broken animation
@@ -1186,7 +1227,14 @@
       case 'facil': diffMultiplier = 0.5; spawnRate = 150; break;
       case 'medio': diffMultiplier = 1.0; spawnRate = 100; break;
       case 'dificil': diffMultiplier = 1.5; spawnRate = 80; break;
-      case 'hardcore': diffMultiplier = 2.5; spawnRate = 60; player.vida = 1; break;
+      case 'hardcore': 
+        diffMultiplier = 2.5; 
+        spawnRate = 60; 
+        player.vida = 1; 
+        currentMilestoneTarget = 4200; 
+        currentUnlockInterval = 1200; 
+        unlockedEnemies = 3; // Harder from start
+        break;
       case 'progresivo': diffMultiplier = 1.0; spawnRate = 120; break;
     }
     startCountdown();
@@ -1269,9 +1317,14 @@
   /* =========================================================
      PREMIUM POWER CHOICE
      ========================================================= */
-  function choosePremiumPower(type) {
+  window.choosePremiumPower = function(type) {
+    if (gameState !== 'CHOOSING') return; // BUG FIX: already chosen
+    
     if (type === 'life') {
       player.vida++;
+    } else if (type === 'ultra') {
+      ultraEnergy = ULTRA_MAX;
+      triggerUltra();
     } else {
       player.powers[type] += PREMIUM_DURATION;
     }
@@ -1280,13 +1333,16 @@
     SFX.powerup();
     gameState = 'PLAYING';
     requestAnimationFrame(gameLoop);
-  }
+  };
 
   /* =========================================================
-     GAME OVER
+     GAME OVER & RESTART
      ========================================================= */
   function endGame() {
     gameState = 'GAMEOVER';
+    $('game-over-menu').classList.add('active');
+    $('pause-btn').style.display = 'none';
+    
     const records = Storage.load();
     records.gamesPlayed++;
     const currentAvg = kills > 0 ? parseFloat((score / kills).toFixed(1)) : 0;
@@ -1306,7 +1362,7 @@
 
     $('game-over-title').innerText = newRecord ? '🏆 ¡NUEVO RÉCORD! 🏆' : 'MISIÓN FALLIDA';
     $('game-over-title').style.color = newRecord ? '#f1c40f' : '#ff3366';
-    $('final-stats').innerText = `Sobreviviste ${time}s`;
+    $('final-stats').innerText = `Dificultad: ${selectedDifficulty.toUpperCase()} | Sobreviviste ${time}s`;
 
     const body = $('records-body');
     body.innerHTML = '';
@@ -1316,9 +1372,24 @@
       row.innerHTML = `<td>${results[key].label}</td><td>${results[key].current}</td><td class="${isNew ? 'highlight-record' : ''}">${results[key].best}</td>`;
       body.appendChild(row);
     }
-
-    $('game-over-menu').classList.add('active');
   }
+
+  window.retryGame = function() {
+    // Reset core stats but keep difficulty and skin
+    score = 0; scoreMilestone = 0;
+    kills = 0; killsMilestone = 0;
+    time = 0; frame = 0;
+    ultraEnergy = 0;
+    bullets = []; enemies = []; powerUps = []; hearts = [];
+    
+    player.x = WORLD.WIDTH / 2;
+    player.y = WORLD.HEIGHT / 2;
+    player.powers = { auto: 0, manual: 0, speed: 0, shield: 0 };
+    player.debuffs = { slow: 0, disable: 0 };
+    
+    // Reset specific difficulty stats
+    startGame(selectedDifficulty);
+  };
 
   /* =========================================================
      PWA INSTALL PROMPT
@@ -1372,7 +1443,6 @@
   window.openTutorial = openTutorial;
   window.closeTutorial = closeTutorial;
   window.switchTab = switchTab;
-  window.choosePremiumPower = choosePremiumPower;
   window.installApp = installApp;
   window.hideInstallBanner = hideInstallBanner;
 
