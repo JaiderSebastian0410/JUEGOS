@@ -171,7 +171,7 @@
     showAnnouncement("⚡ ¡FLASH NOVA! ⚡");
   }
 
-  // Touch — movement
+  // Touch — direct finger follow
   window.addEventListener('touchstart', (e) => {
     isMobile = true;
     $('mobile-controls').style.display = 'flex';
@@ -180,17 +180,20 @@
   }, { passive: false });
 
   window.addEventListener('touchmove', (e) => {
-    if (!touchStart || gameState !== 'PLAYING') return;
+    if (gameState !== 'PLAYING') return;
     e.preventDefault();
-    const dx = e.touches[0].clientX - touchStart.x;
-    const dy = e.touches[0].clientY - touchStart.y;
-    player.x += dx * 1.5;
-    player.y += dy * 1.5;
-    if (hypot(dx, dy) > 1) player.angle = Math.atan2(dy, dx);
-    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.touches.length > 0) {
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
   }, { passive: false });
 
-  window.addEventListener('touchend', () => { touchStart = null; });
+  window.addEventListener('touchend', (e) => { 
+    if (e.touches.length === 0) {
+      touchStart = null; 
+    } else {
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  });
 
   // Fire button
   const fireBtn = $('fire-btn');
@@ -219,6 +222,10 @@
      PARTICLES
      ========================================================= */
   function createParticles(x, y, color, amount) {
+    // Optimization limit particle spam
+    if (isMobile) amount = Math.floor(amount / 3) || 1;
+    if (particles.length > 80) particles.splice(0, particles.length - 80); // Cap active particles
+
     for (let i = 0; i < amount; i++) {
       particles.push({
         x, y,
@@ -291,6 +298,21 @@
     if (keys['s'] || keys['S'] || keys['ArrowDown']) moveY += moveSpeed;
     if (keys['a'] || keys['A'] || keys['ArrowLeft']) moveX -= moveSpeed;
     if (keys['d'] || keys['D'] || keys['ArrowRight']) moveX += moveSpeed;
+
+    // Follow finger continuously
+    if (touchStart) {
+      const targetWorldX = touchStart.x + camera.x;
+      const targetWorldY = touchStart.y + camera.y;
+      const dx = targetWorldX - player.x;
+      const dy = targetWorldY - player.y;
+      const dist = Math.hypot(dx, dy);
+      
+      // Stop jittering when reaching finger
+      if (dist > moveSpeed) {
+        moveX += (dx / dist) * moveSpeed;
+        moveY += (dy / dist) * moveSpeed;
+      }
+    }
 
     player.x += moveX;
     player.y += moveY;

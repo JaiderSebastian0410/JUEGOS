@@ -247,7 +247,7 @@ canvas { display: block; }
 /* ---- Mobile Controls ---- */
 #mobile-controls {
   position: absolute;
-  bottom: 85px; right: 20px;
+  bottom: 85px; left: 20px;
   display: none;
   flex-direction: column;
   gap: 15px;
