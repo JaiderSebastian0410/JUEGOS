@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Space Defender Pro - Ultimate Edition</title>
+  <meta name="description" content="¡Defiende la frontera galáctica! Simulador de combate espacial con enemigos de élite, poderes tácticos y dificultad progresiva.">
+  <meta name="theme-color" content="#050510">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Space Defender">
+
+  <!-- Icons -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <!-- HUD Bar -->
+  <div id="ui-bottom">
+    <div class="stat-box"><span class="stat-label">❤️ Vidas</span><span class="stat-value" id="vida">5</span></div>
+    <div class="stat-box"><span class="stat-label">☠️ Kills</span><span class="stat-value" id="kills">0</span></div>
+    <div class="stat-box"><span class="stat-label">⭐ Score</span><span class="stat-value" id="score">0</span></div>
+    <div class="stat-box"><span class="stat-label">⏱️ Tiempo</span><span class="stat-value" id="time">0</span></div>
+    <div class="stat-box"><span class="stat-label">Poderes</span><span class="stat-value" id="power" style="color:#aaa; font-size: 0.85rem;">Ninguno</span></div>
+  </div>
+
+  <!-- Countdown -->
+  <div id="countdown">3</div>
+
+  <!-- Mobile Controls -->
+  <div id="mobile-controls">
+    <div class="touch-btn" id="fire-btn">🔥</div>
+  </div>
+
+  <!-- Announcements -->
+  <div id="announcement">NUEVA AMENAZA DETECTADA</div>
+
+  <!-- Welcome Menu -->
+  <div id="start-menu" class="overlay active">
+    <h1 style="color: #00ffff;">SPACE DEFENDER</h1>
+    <p>¡Bienvenido, cadete! Defiende la frontera galáctica en este simulador de combate de alto riesgo. Explora un mapa vasto, derrota enemigos de élite y gestiona tus suministros tácticos para sobrevivir.</p>
+    <div class="btn-group">
+      <button class="btn" onclick="startCountdown()">¡A Jugar!</button>
+      <button class="btn secondary" onclick="openTutorial()">Tutorial</button>
+    </div>
+  </div>
+
+  <!-- Tutorial Menu -->
+  <div id="tutorial-menu-overlay" class="overlay">
+    <div id="tutorial-menu">
+      <div class="tabs-header">
+        <div class="tab-btn active" onclick="switchTab(0)">Poderes</div>
+        <div class="tab-btn" onclick="switchTab(1)">Enemigos</div>
+        <div class="tab-btn" onclick="switchTab(2)">Movimiento</div>
+        <div class="tab-btn" onclick="switchTab(3)">Reglas</div>
+      </div>
+
+      <div id="tab-0" class="tab-content active">
+        <h2>Suministros Tácticos</h2>
+        <ul>
+          <li><strong>Símbolos Geométricos:</strong>
+            <ul>
+              <li><strong>Auto Láser (|||):</strong> Tres líneas amarillas. Disparo automático.</li>
+              <li><strong>Cañón Manual (🎯):</strong> Mira naranja. Disparo manual potente.</li>
+              <li><strong>Hyper Velocidad (^^):</strong> Doble flecha verde. Más agilidad.</li>
+              <li><strong>Escudo Prisma (⬢):</strong> Hexágono azul. Invulnerabilidad total.</li>
+            </ul>
+          </li>
+          <li><strong>Acumulativos:</strong> Recoger el mismo poder varias veces <strong>suma</strong> su duración restante.</li>
+          <li><strong>Cañón Manual:</strong> Solo consume su "munición" cuando mantienes <strong>Espacio</strong> o el botón 🔥.</li>
+          <li><strong>Escudo Prisma:</strong> Además de protegerte, chocar contra enemigos los destruye y cuenta como Kill.</li>
+        </ul>
+      </div>
+
+      <div id="tab-1" class="tab-content">
+        <h2>Amenazas del Espacio</h2>
+        <p>Cada 700 puntos de score, una nueva amenaza de clase superior entra en el sector:</p>
+        <ul style="font-size: 0.85rem;" id="enemy-list-tutorial">
+          <li><strong>Morg (Círculo):</strong> Amenaza base. HP 1.</li>
+          <li><strong>Stinger (Triángulo):</strong> Rápido e impredecible. HP 1.</li>
+          <li><strong>Titan (Cuadrado):</strong> Blindaje pesado. HP 3.</li>
+          <li><strong>Vanguard (Pentágono):</strong> Escoltas de combate. HP 2.</li>
+          <li><strong>Wasp (Hexágono):</strong> Ágil y veloz. HP 2.</li>
+          <li><strong>Pulsar (Estrella):</strong> Gran resistencia. HP 4.</li>
+          <li><strong>Razor (Diamante):</strong> Velocidad extrema. HP 2.</li>
+          <li><strong>Interceptor (Cruz):</strong> Agresividad alta. HP 5.</li>
+          <li><strong>Goliath (Octágono):</strong> Fortaleza móvil. HP 8.</li>
+          <li><strong>Overlord (UFO):</strong> La amenaza definitiva. HP 12.</li>
+        </ul>
+      </div>
+
+      <div id="tab-2" class="tab-content">
+        <h2>Controles de Vuelo</h2>
+        <ul>
+          <li><strong>Teclado:</strong> Usa <strong>WASD</strong> o las <strong>Flechas</strong> para desplazarte libremente.</li>
+          <li><strong>Giro 360°:</strong> Tu nave girará sola hacia donde te muevas, disparando en esa dirección.</li>
+          <li><strong>Disparo Manual:</strong> Si tienes el poder del Cañón Manual (🎯), mantén presionado <strong>ESPACIO</strong> para abrir fuego.</li>
+          <li><strong>Móvil:</strong> Desliza el dedo por la pantalla para moverte. Usa el botón 🔥 para el disparo manual.</li>
+        </ul>
+      </div>
+
+      <div id="tab-3" class="tab-content">
+        <h2>Reglas de Misión</h2>
+        <ul>
+          <li><strong>Módulos de Vida:</strong> Cada <strong>70 enemigos derrotados</strong>, tu nave recibe un módulo de vida extra.</li>
+          <li><strong>Bonus de Score:</strong> Al alcanzar intervalos de <strong>1000 puntos</strong>, podrás elegir una Mejora Premium de larga duración (25s).</li>
+          <li><strong>Vidas Extra Escasas:</strong> Los corazones aparecen raramente y desaparecen en pocos segundos. ¡Aprovecha cuando los veas!</li>
+        </ul>
+      </div>
+
+      <div class="tutorial-footer">
+        <button class="btn secondary" style="min-width: 120px;" onclick="closeTutorial()">Atrás</button>
+        <button class="btn" style="min-width: 120px;" onclick="startCountdown()">¡Listo!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over Menu -->
+  <div id="game-over-menu" class="overlay">
+    <h1 id="game-over-title">MISIÓN FALLIDA</h1>
+    <p id="final-stats">Sobreviviste 0s</p>
+    <table class="records-table">
+      <thead>
+        <tr>
+          <th>Estadística</th>
+          <th>Actual</th>
+          <th>Record</th>
+        </tr>
+      </thead>
+      <tbody id="records-body"></tbody>
+    </table>
+    <div class="btn-group">
+      <button class="btn" onclick="location.reload()">Reintentar</button>
+    </div>
+  </div>
+
+  <!-- Level Up / Score Milestone Menu -->
+  <div id="levelup-menu" class="overlay">
+    <h1 style="color: #f1c40f;">¡PUNTUACIÓN DESTACADA!</h1>
+    <p>Has alcanzado 1000 puntos. Elige una mejora premium prolongada (25s):</p>
+    <div class="power-choices">
+      <div class="power-btn" onclick="choosePremiumPower('auto')">
+        <h3>Auto Láser</h3>
+        <p>Ráfaga letal sin pulsar nada</p>
+      </div>
+      <div class="power-btn" onclick="choosePremiumPower('manual')">
+        <h3>Cañón Manual</h3>
+        <p>Energía extra. Úsalo con ESPACIO.</p>
+      </div>
+      <div class="power-btn" onclick="choosePremiumPower('speed')">
+        <h3>Hyper Velocidad</h3>
+        <p>Movilidad superior extrema.</p>
+      </div>
+      <div class="power-btn" onclick="choosePremiumPower('shield')">
+        <h3>Escudo Prisma</h3>
+        <p>Invulnerable a impactos y sumas kills.</p>
+      </div>
+      <div class="power-btn" onclick="choosePremiumPower('life')">
+        <h3>Módulo Vital</h3>
+        <p>+1 Vida Extra inmediata</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PWA Install Banner -->
+  <div id="install-banner">
+    <img src="icon-192.png" alt="Space Defender" width="48" height="48">
+    <div class="install-info">
+      <strong>Space Defender</strong>
+      <span>Instalar app para jugar offline</span>
+    </div>
+    <div class="install-actions">
+      <button class="install-btn" onclick="installApp()">Instalar</button>
+      <button class="install-close" onclick="hideInstallBanner()" aria-label="Cerrar">&times;</button>
+    </div>
+  </div>
+
+  <!-- Game Canvas -->
+  <canvas id="game"></canvas>
+
+  <!-- Game Engine -->
+  <script src="game.js"></script>
+</body>
+
+</html>
