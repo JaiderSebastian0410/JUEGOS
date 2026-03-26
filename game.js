@@ -298,6 +298,8 @@
   }
 
   function updateAndDrawParticles() {
+    ctx.save();
+    ctx.shadowBlur = 0; // Prevent heavy shadow lag on particles
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
       p.x += p.vx;
@@ -313,7 +315,7 @@
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha = 1.0;
+    ctx.restore();
   }
 
   /* =========================================================
@@ -326,7 +328,7 @@
   function updateAndDrawFloatingTexts() {
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.font = 'bold 16px Orbitron';
+    ctx.font = 'bold 22px Orbitron';
     for (let i = floatingTexts.length - 1; i >= 0; i--) {
       const ft = floatingTexts[i];
       ft.y += ft.dy;
@@ -335,8 +337,13 @@
       
       ctx.globalAlpha = ft.life;
       ctx.fillStyle = ft.color;
-      ctx.shadowBlur = 5;
-      ctx.shadowColor = ft.color;
+      if (!isMobile) {
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = ft.color;
+      }
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(ft.text, ft.x, ft.y);
       ctx.fillText(ft.text, ft.x, ft.y);
     }
     ctx.restore();
