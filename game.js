@@ -29,16 +29,16 @@
   ]);
 
   const ENEMY_TYPES = Object.freeze([
-    { name: 'Morg', shape: 'circle', color: '#ff3366', size: 14, hp: 1, speed: 1.5, pts: 10 },
-    { name: 'Stinger', shape: 'triangle', color: '#e67e22', size: 12, hp: 2, speed: 3.0, pts: 15 },
-    { name: 'Titan', shape: 'square', color: '#9b59b6', size: 20, hp: 5, speed: 1.0, pts: 30 },
-    { name: 'Vanguard', shape: 'pentagon', color: '#2ecc71', size: 16, hp: 3, speed: 1.8, pts: 25 },
-    { name: 'Wasp', shape: 'hexagon', color: '#f1c40f', size: 14, hp: 3, speed: 2.4, pts: 20 },
-    { name: 'Pulsar', shape: 'star', color: '#3498db', size: 18, hp: 6, speed: 1.5, pts: 40 },
-    { name: 'Razor', shape: 'diamond', color: '#1abc9c', size: 10, hp: 3, speed: 3.5, pts: 35 },
-    { name: 'Interceptor', shape: 'cross', color: '#ff007f', size: 16, hp: 7, speed: 2.0, pts: 50 },
-    { name: 'Goliath', shape: 'octagon', color: '#ecf0f1', size: 24, hp: 12, speed: 1.2, pts: 80 },
-    { name: 'Overlord', shape: 'ufo', color: '#f1c40f', size: 28, hp: 20, speed: 1.4, pts: 150 },
+    { name: 'Morg', shape: 'circle', color: '#ff3366', size: 14, hp: 1, speed: 1.1, pts: 10 },
+    { name: 'Stinger', shape: 'triangle', color: '#e67e22', size: 12, hp: 1, speed: 2.2, pts: 15 },
+    { name: 'Titan', shape: 'square', color: '#9b59b6', size: 20, hp: 3, speed: 0.7, pts: 30 },
+    { name: 'Vanguard', shape: 'pentagon', color: '#2ecc71', size: 16, hp: 2, speed: 1.2, pts: 25 },
+    { name: 'Wasp', shape: 'hexagon', color: '#f1c40f', size: 14, hp: 2, speed: 1.6, pts: 20 },
+    { name: 'Pulsar', shape: 'star', color: '#3498db', size: 18, hp: 4, speed: 1.0, pts: 40 },
+    { name: 'Razor', shape: 'diamond', color: '#1abc9c', size: 10, hp: 2, speed: 2.6, pts: 35 },
+    { name: 'Interceptor', shape: 'cross', color: '#ff007f', size: 16, hp: 5, speed: 1.3, pts: 50 },
+    { name: 'Goliath', shape: 'octagon', color: '#ecf0f1', size: 24, hp: 8, speed: 0.6, pts: 80 },
+    { name: 'Overlord', shape: 'ufo', color: '#f1c40f', size: 28, hp: 12, speed: 0.9, pts: 150 },
   ]);
 
   /* =========================================================
@@ -363,7 +363,8 @@
       if (roll < cumulative) { selectedType = ENEMY_TYPES[i]; break; }
     }
 
-    const baseSpeed = selectedType.speed + score * 0.00025; // Accelerate speed significantly faster
+    // Original speed scaling. Ensure baseSpeed never exceeds player base speed (6)
+    const baseSpeed = Math.min(selectedType.speed + score * 0.0001, PLAYER_BASE_SPEED);
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.max(camera.width, camera.height) * 0.6;
     const spawnX = clamp(player.x + Math.cos(angle) * dist, 100, WORLD.WIDTH - 100);
@@ -795,7 +796,7 @@
     if (frame % 60 === 0) {
       time++;
       addScore(8);
-      if (spawnRate > 40) spawnRate -= 0.8; // Decreases directly to 40, meaning MUCH faster spawn rates over time
+      if (spawnRate > 60) spawnRate -= 0.5; // Reverted to original comfortable difficulty
     }
 
     updateUI();
