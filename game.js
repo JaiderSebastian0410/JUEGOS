@@ -801,7 +801,12 @@
   function drawPlayer(targetCtx = ctx, pObj = player) {
     targetCtx.save();
     targetCtx.translate(pObj.x, pObj.y);
-    targetCtx.rotate(pObj.angle + Math.PI / 2);
+    
+    // Add extra PI if it's the classic skin (Elite) as requested by user due to inverted asset
+    let finalAngle = pObj.angle + Math.PI / 2;
+    if (pObj.skin.type === 'classic') finalAngle += Math.PI;
+    
+    targetCtx.rotate(finalAngle);
 
     // Image Skins (Classic, Phantom, Golden, Custom)
     if (pObj.skin.img) {
