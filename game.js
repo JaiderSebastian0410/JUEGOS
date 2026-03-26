@@ -142,7 +142,8 @@
      INPUT HANDLING
      ========================================================= */
   const keys = {};
-  let touchStart = null;
+  let joystickOrigin = null;
+  let joystickCurrent = null;
   let isMobile = false;
   let isFiring = false;
 
@@ -171,27 +172,32 @@
     showAnnouncement("⚡ ¡FLASH NOVA! ⚡");
   }
 
-  // Touch — direct finger follow
+  // Touch — virtual joystick
   window.addEventListener('touchstart', (e) => {
     isMobile = true;
     $('mobile-controls').style.display = 'flex';
     if (gameState !== 'PLAYING') return;
-    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.target.closest('#mobile-controls')) return;
+    
+    joystickOrigin = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    joystickCurrent = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   }, { passive: false });
 
   window.addEventListener('touchmove', (e) => {
-    if (gameState !== 'PLAYING') return;
+    if (gameState !== 'PLAYING' || !joystickOrigin) return;
     e.preventDefault();
     if (e.touches.length > 0) {
-      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      joystickCurrent = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     }
   }, { passive: false });
 
   window.addEventListener('touchend', (e) => { 
     if (e.touches.length === 0) {
-      touchStart = null; 
-    } else {
-      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      joystickOrigin = null; 
+      joystickCurrent = null;
+    } else if (joystickOrigin) {
+      joystickOrigin = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      joystickCurrent = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     }
   });
 
@@ -299,24 +305,25 @@
     if (keys['a'] || keys['A'] || keys['ArrowLeft']) moveX -= moveSpeed;
     if (keys['d'] || keys['D'] || keys['ArrowRight']) moveX += moveSpeed;
 
-    // Follow finger continuously
-    if (touchStart) {
-      const targetWorldX = touchStart.x + camera.x;
-      const targetWorldY = touchStart.y + camera.y;
-      const dx = targetWorldX - player.x;
-      const dy = targetWorldY - player.y;
+    // Virtual Joystick logic
+    if (joystickOrigin && joystickCurrent) {
+      const dx = joystickCurrent.x - joystickOrigin.x;
+      const dy = joystickCurrent.y - joystickOrigin.y;
       const dist = Math.hypot(dx, dy);
       
-      // Stop jittering when reaching finger
-      if (dist > moveSpeed) {
-        moveX += (dx / dist) * moveSpeed;
-        moveY += (dy / dist) * moveSpeed;
+      if (dist > 5) { // Deadzone
+        const maxRadius = 40; // Pixels until max speed
+        const speedMultiplier = Math.min(dist / maxRadius, 1);
+        const actualSpeed = moveSpeed * speedMultiplier;
+        
+        moveX += (dx / dist) * actualSpeed;
+        moveY += (dy / dist) * actualSpeed;
       }
     }
 
     player.x += moveX;
     player.y += moveY;
-    if (hypot(moveX, moveY) > 0.1) player.angle = Math.atan2(moveY, moveX);
+    if (Math.hypot(moveX, moveY) > 0.1) player.angle = Math.atan2(moveY, moveX);
 
     player.x = clamp(player.x, player.size, WORLD.WIDTH - player.size);
     player.y = clamp(player.y, player.size, WORLD.HEIGHT - player.size);
