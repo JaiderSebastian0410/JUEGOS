@@ -802,9 +802,11 @@
     targetCtx.save();
     targetCtx.translate(pObj.x, pObj.y);
     
-    // Add extra PI if it's the classic skin (Elite) as requested by user due to inverted asset
-    let finalAngle = pObj.angle + Math.PI / 2;
-    if (pObj.skin.type === 'classic') finalAngle += Math.PI;
+    // Most professional assets face RIGHT or UP. 
+    // If naturally facing RIGHT, rotate(angle) is correct (0 rad = Right, -PI/2 = Up).
+    // If naturally facing UP, rotate(angle + PI/2) is correct.
+    // Given the user report, the current asset naturally faces RIGHT.
+    let finalAngle = pObj.angle; 
     
     targetCtx.rotate(finalAngle);
 
