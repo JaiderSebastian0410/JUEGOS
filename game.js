@@ -171,6 +171,19 @@
     debuffs: { slow: 0, disable: 0 }
   };
 
+  const SKINS = {
+    classic: new Image(),
+    phantom: new Image(),
+    golden: new Image()
+  };
+  SKINS.classic.src = 'skin_classic.png';
+  SKINS.phantom.src = 'skin_phantom.png';
+  SKINS.golden.src = 'skin_golden.png';
+
+  // Ensure preview is updated once loaded
+  const updatePreview = () => { if(gameState === 'MENU') selectSkin(player.skin.type); };
+  Object.values(SKINS).forEach(img => img.onload = updatePreview);
+
   let bullets = [];
   let enemies = [];
   let powerUps = [];
@@ -206,13 +219,36 @@
 
   window.selectSkin = function(type) {
     player.skin.type = type;
-    player.skin.img = null;
-    const names = { 'classic': 'Clásica (Cyan)', 'phantom': 'Phantom', 'golden': 'Golden' };
+    if (SKINS[type]) player.skin.img = SKINS[type];
+    else player.skin.img = null;
+
+    const names = { 
+      'classic': 'Elite Steel', 'phantom': 'Phantom Stealth', 'golden': 'Golden Elite',
+      'retro_triangle': 'Retro Delta', 'retro_ufo': 'Retro Interceptor'
+    };
     const status = document.getElementById('skin-status');
-    if (status) status.innerText = 'Skin actual: ' + names[type];
+    if (status) status.innerText = 'Skin: ' + (names[type] || 'Personalizada');
+    
+    drawPreview();
     if (window.initAudio) window.initAudio();
     SFX.hit();
   };
+
+  function drawPreview() {
+    const pCanvas = $('skin-preview');
+    if (!pCanvas) return;
+    const pCtx = pCanvas.getContext('2d');
+    pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+    
+    pCtx.save();
+    pCtx.translate(pCanvas.width / 2, pCanvas.height / 2);
+    
+    // Use the same drawing logic as the player but localized
+    const tempPlayer = { ...player, x:0, y:0, angle: -Math.PI/2 };
+    drawPlayer(pCtx, tempPlayer);
+    
+    pCtx.restore();
+  }
 
   window.uploadSkin = function(e) {
     const file = e.target.files[0];
@@ -221,10 +257,34 @@
     reader.onload = function(event) {
       const img = new Image();
       img.onload = function() {
-        player.skin.type = 'custom';
-        player.skin.img = img;
-        const status = document.getElementById('skin-status');
-        if (status) status.innerText = 'Skin actual: Personalizada (IMG)';
+        // Automatic Background Removal (Simple White/Balance threshold)
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // Assume corners are background
+        const rbg = [data[0], data[1], data[2]]; 
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i+1], b = data[i+2];
+          // If pixel is close to white or close to the first pixel color (simple chroma key)
+          const diff = Math.abs(r-255) + Math.abs(g-255) + Math.abs(b-255);
+          const cornerDiff = Math.abs(r-rbg[0]) + Math.abs(g-rbg[1]) + Math.abs(b-rbg[2]);
+          if (diff < 60 || cornerDiff < 30) data[i+3] = 0; 
+        }
+        ctx.putImageData(imageData, 0, 0);
+        
+        const finalImg = new Image();
+        finalImg.onload = () => {
+          player.skin.type = 'custom';
+          player.skin.img = finalImg;
+          document.getElementById('skin-status').innerText = 'Skin: Personalizada (IMG)';
+          drawPreview();
+        };
+        finalImg.src = canvas.toDataURL();
       };
       img.src = event.target.result;
     };
@@ -699,91 +759,94 @@
   /* =========================================================
      DRAWING — PLAYER
      ========================================================= */
-  function drawPlayer() {
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(player.angle + Math.PI / 2);
+  function drawPlayer(targetCtx = ctx, pObj = player) {
+    targetCtx.save();
+    targetCtx.translate(pObj.x, pObj.y);
+    targetCtx.rotate(pObj.angle + Math.PI / 2);
 
-    // Custom Image Skin
-    if (player.skin.type === 'custom' && player.skin.img) {
-      const s = player.size * 2;
-      ctx.drawImage(player.skin.img, -s/2, -s/2, s, s);
-      ctx.restore();
-      // Draw shield separate
-      if (player.powers.shield > 0) {
-        ctx.save();
-        ctx.translate(player.x, player.y);
-        ctx.beginPath();
-        ctx.arc(0, 0, player.size + 15, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        ctx.restore();
+    // Image Skins (Classic, Phantom, Golden, Custom)
+    if (pObj.skin.img) {
+      const s = pObj.size * 2.2; 
+      targetCtx.drawImage(pObj.skin.img, -s/2, -s/2, s, s);
+      
+      if (pObj.powers.auto > 0 || pObj.powers.manual > 0) {
+        targetCtx.globalCompositeOperation = 'lighter';
+        targetCtx.globalAlpha = 0.3;
+        targetCtx.drawImage(pObj.skin.img, -s/2, -s/2, s, s);
+        targetCtx.globalCompositeOperation = 'source-over';
+        targetCtx.globalAlpha = 1.0;
+      }
+      
+      targetCtx.restore();
+      if (pObj.powers.shield > 0) {
+        targetCtx.save(); targetCtx.translate(pObj.x, pObj.y);
+        targetCtx.beginPath(); targetCtx.arc(0, 0, pObj.size + 15, 0, Math.PI * 2);
+        targetCtx.strokeStyle = 'rgba(52, 152, 219, 0.8)'; targetCtx.lineWidth = 3; targetCtx.stroke();
+        targetCtx.restore();
       }
       return;
     }
 
     let pColor = '#00ffff';
-    if (player.skin.type === 'phantom') pColor = '#9b59b6';
-    else if (player.skin.type === 'golden') pColor = '#f1c40f';
+    if (pObj.skin.type === 'phantom') pColor = '#9b59b6';
+    else if (pObj.skin.type === 'golden') pColor = '#f1c40f';
+    else if (pObj.skin.type === 'retro_triangle') pColor = '#2ecc71';
+    else if (pObj.skin.type === 'retro_ufo') pColor = '#e74c3c';
     
-    // Power overrides skin color temporarily
-    if (player.powers.auto > 0) pColor = '#f7ca18';
-    else if (player.powers.manual > 0) pColor = '#e67e22';
+    if (pObj.powers.auto > 0) pColor = '#f7ca18';
+    else if (pObj.powers.manual > 0) pColor = '#e67e22';
 
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = pColor;
-    ctx.fillStyle = player.skin.type === 'phantom' ? 'rgba(20, 10, 30, 0.8)' : '#101015';
-    ctx.strokeStyle = pColor;
-    ctx.lineWidth = 2.5;
+    targetCtx.shadowBlur = 20;
+    targetCtx.shadowColor = pColor;
+    targetCtx.fillStyle = '#101015';
+    targetCtx.strokeStyle = pColor;
+    targetCtx.lineWidth = 2.5;
 
-    ctx.beginPath();
-    if (player.skin.type === 'golden') {
-      // Sleek Diamond shape for Golden
-      ctx.moveTo(0, -player.size * 1.2);
-      ctx.lineTo(player.size, 0);
-      ctx.lineTo(0, player.size * 1.2);
-      ctx.lineTo(-player.size, 0);
+    targetCtx.beginPath();
+    if (pObj.skin.type === 'retro_ufo') {
+      targetCtx.ellipse(0, 0, pObj.size, pObj.size/2, 0, 0, Math.PI * 2);
+      targetCtx.moveTo(-pObj.size/2, -pObj.size/4);
+      targetCtx.arc(0, -pObj.size/4, pObj.size/2, Math.PI, 0);
     } else {
-      ctx.moveTo(0, -player.size);
-      ctx.lineTo(player.size * 0.8, player.size);
-      ctx.lineTo(0, player.size - 6);
-      ctx.lineTo(-player.size * 0.8, player.size);
+      targetCtx.moveTo(0, -pObj.size);
+      targetCtx.lineTo(pObj.size * 0.8, pObj.size);
+      targetCtx.lineTo(0, pObj.size - 6);
+      targetCtx.lineTo(-pObj.size * 0.8, pObj.size);
     }
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+    targetCtx.closePath();
+    targetCtx.fill();
+    targetCtx.stroke();
 
     // Phantom wing trails
-    if (player.skin.type === 'phantom') {
-      ctx.strokeStyle = 'rgba(155, 89, 182, 0.4)';
-      ctx.beginPath();
-      ctx.moveTo(-player.size, 10); ctx.lineTo(-player.size * 1.5, 25);
-      ctx.moveTo(player.size, 10); ctx.lineTo(player.size * 1.5, 25);
-      ctx.stroke();
+    if (pObj.skin.type === 'phantom') {
+      targetCtx.strokeStyle = 'rgba(155, 89, 182, 0.4)';
+      targetCtx.beginPath();
+      targetCtx.moveTo(-pObj.size, 10); targetCtx.lineTo(-pObj.size * 1.5, 25);
+      targetCtx.moveTo(pObj.size, 10); targetCtx.lineTo(pObj.size * 1.5, 25);
+      targetCtx.stroke();
     }
 
     // Shield aura
-    if (player.powers.shield > 0) {
-      ctx.beginPath();
-      ctx.arc(0, 0, player.size + 15, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
-      ctx.shadowColor = '#3498db';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+    if (pObj.powers.shield > 0) {
+      targetCtx.beginPath();
+      targetCtx.arc(0, 0, pObj.size + 15, 0, Math.PI * 2);
+      targetCtx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
+      targetCtx.shadowColor = '#3498db';
+      targetCtx.lineWidth = 3;
+      targetCtx.stroke();
     }
     
     // Debuff visual
-    if (player.debuffs.slow > 0 || player.debuffs.disable > 0) {
-      ctx.beginPath();
-      ctx.arc(0, 0, player.size + 10, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(163, 73, 164, 0.6)';
-      ctx.setLineDash([5, 5]);
-      ctx.stroke();
-      ctx.setLineDash([]);
+    if (pObj.debuffs.slow > 0 || pObj.debuffs.disable > 0) {
+      targetCtx.beginPath();
+      targetCtx.arc(0, 0, pObj.size + 10, 0, Math.PI * 2);
+      targetCtx.strokeStyle = 'rgba(163, 73, 164, 0.6)';
+      targetCtx.setLineDash([5, 5]);
+      targetCtx.stroke();
+      targetCtx.setLineDash([]);
     }
 
-    ctx.restore();
+    targetCtx.restore();
   }
 
   /* =========================================================
@@ -1062,6 +1125,9 @@
       case 'progresivo': diffMultiplier = 1.0; spawnRate = 120; break;
     }
     startCountdown();
+
+    // Trigger initial preview draw
+    setTimeout(drawPreview, 100);
   };
 
   window.openSettings = function() {

@@ -56,19 +56,26 @@
   <div id="start-menu" class="overlay active">
     <h1 style="color: #00ffff;">SPACE DEFENDER</h1>
     
-    <div style="margin-bottom: 20px; background: rgba(0,255,255,0.05); padding: 15px; border-radius: 8px; width: 100%; max-width: 450px;">
-      <h3 style="margin: 0 0 10px 0; color: #00ffff; font-size: 1rem;">Seleccionar Clase de Nave / Skin</h3>
-      <div style="display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap;">
-        <button class="btn skin-btn" style="min-width:auto; padding: 10px 15px; font-size:0.8rem;" onclick="selectSkin('classic')">Clásica (Cyan)</button>
-        <button class="btn skin-btn" style="min-width:auto; padding: 10px 15px; font-size:0.8rem; border-color:#9b59b6; color:#9b59b6;" onclick="selectSkin('phantom')">Phantom</button>
-        <button class="btn skin-btn" style="min-width:auto; padding: 10px 15px; font-size:0.8rem; border-color:#f1c40f; color:#f1c40f;" onclick="selectSkin('golden')">Golden</button>
-        
-        <label class="btn skin-btn" style="min-width:auto; padding: 10px 15px; font-size:0.8rem; cursor:pointer;" title="Sube una imagen plana desde tu dispositivo.">
-          🖼️ Añadir IMG
-          <input type="file" id="skin-upload" accept="image/*" style="display:none;" onchange="uploadSkin(event)">
-        </label>
+    <div style="margin-bottom: 20px; background: rgba(0,255,255,0.05); padding: 20px; border-radius: 12px; width: 100%; max-width: 500px; display: flex; align-items: center; gap: 20px; border: 1px solid rgba(0,255,255,0.2);">
+      <div id="preview-container" style="width: 100px; height: 100px; background: rgba(0,0,0,0.3); border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px dashed #00ffff;">
+        <canvas id="skin-preview" width="80" height="80"></canvas>
       </div>
-      <p id="skin-status" style="font-size:0.8rem; margin: 10px 0 0; color: #aaa;">Skin actual: Clásica</p>
+      <div style="flex: 1; text-align: left;">
+        <h3 style="margin: 0 0 10px 0; color: #00ffff; font-size: 1rem;">Personalizar Nave Estelar</h3>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+          <button class="btn skin-btn" style="padding: 8px 12px; font-size:0.75rem;" onclick="selectSkin('classic')">Elite (Steel)</button>
+          <button class="btn skin-btn" style="padding: 8px 12px; font-size:0.75rem; border-color:#9b59b6; color:#9b59b6;" onclick="selectSkin('phantom')">Phantom</button>
+          <button class="btn skin-btn" style="padding: 8px 12px; font-size:0.75rem; border-color:#f1c40f; color:#f1c40f;" onclick="selectSkin('golden')">Golden</button>
+          <button class="btn skin-btn" style="padding: 8px 12px; font-size:0.75rem; border-color:#2ecc71; color:#2ecc71;" onclick="selectSkin('retro_triangle')">Retro ▲</button>
+          <button class="btn skin-btn" style="padding: 8px 12px; font-size:0.75rem; border-color:#e74c3c; color:#e74c3c;" onclick="selectSkin('retro_ufo')">Retro ◎</button>
+          
+          <label class="btn skin-btn" style="padding: 8px 12px; font-size:0.75rem; cursor:pointer;" title="Sube una imagen y limpiaremos el fondo por ti.">
+            🖼️ Cargar Foto
+            <input type="file" id="skin-upload" accept="image/*" style="display:none;" onchange="uploadSkin(event)">
+          </label>
+        </div>
+        <p id="skin-status" style="font-size:0.75rem; margin: 0; color: #aaa;">Skin: Elite Steel</p>
+      </div>
     </div>
 
     <p style="margin-bottom: 10px;">Selecciona la dificultad para Iniciar:</p>
