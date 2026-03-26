@@ -34,6 +34,10 @@
     <div class="stat-box"><span class="stat-label">⭐ Score</span><span class="stat-value" id="score">0</span></div>
     <div class="stat-box"><span class="stat-label">⏱️ Tiempo</span><span class="stat-value" id="time">0</span></div>
     <div class="stat-box"><span class="stat-label">Poderes</span><span class="stat-value" id="power" style="color:#aaa; font-size: 0.85rem;">Ninguno</span></div>
+    <div class="stat-box" style="flex: 1; min-width: 150px; justify-content: flex-end;">
+      <span class="stat-label" style="color: #ff007f; text-shadow: 0 0 5px #ff007f;">⚡ ULTRA</span>
+      <div class="energy-bar-bg"><div id="ultra-bar" class="energy-bar-fill"></div></div>
+    </div>
   </div>
 
   <!-- Countdown -->
@@ -42,6 +46,7 @@
   <!-- Mobile Controls -->
   <div id="mobile-controls">
     <div class="touch-btn" id="fire-btn">🔥</div>
+    <div class="touch-btn ultra-btn-disabled" id="ultra-btn">⚡</div>
   </div>
 
   <!-- Announcements -->
@@ -78,6 +83,7 @@
               <li><strong>Escudo Prisma (⬢):</strong> Hexágono azul. Invulnerabilidad total.</li>
             </ul>
           </li>
+          <li><strong>⚡ Flash Nova (Ultra):</strong> Se carga consiguiendo Kills. Extermina todos los enemigos en pantalla. Úsalo con la tecla <strong>Q</strong> o <strong>Shift</strong>, o tocando el botón ⚡ en móvil.</li>
           <li><strong>Acumulativos:</strong> Recoger el mismo poder varias veces <strong>suma</strong> su duración restante.</li>
           <li><strong>Cañón Manual:</strong> Solo consume su "munición" cuando mantienes <strong>Espacio</strong> o el botón 🔥.</li>
           <li><strong>Escudo Prisma:</strong> Además de protegerte, chocar contra enemigos los destruye y cuenta como Kill.</li>

@@ -134,6 +134,10 @@
   let scoreMilestone = 0;
   let unlockedEnemies = 1;
 
+  const ULTRA_MAX = 100; // Requires 100 kills to charge
+  let ultraEnergy = 0;
+  let flashAlpha = 0;
+
   /* =========================================================
      INPUT HANDLING
      ========================================================= */
@@ -142,8 +146,30 @@
   let isMobile = false;
   let isFiring = false;
 
-  document.addEventListener('keydown', (e) => { keys[e.key] = true; });
+  document.addEventListener('keydown', (e) => { 
+    keys[e.key] = true; 
+    if ((e.key === 'q' || e.key === 'Q' || e.key === 'Shift') && ultraEnergy >= ULTRA_MAX) {
+      triggerUltra();
+    }
+  });
   document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+  function triggerUltra() {
+    if (gameState !== 'PLAYING' || ultraEnergy < ULTRA_MAX) return;
+    
+    ultraEnergy = 0;
+    flashAlpha = 1.0;
+    player.powers.shield = Math.max(player.powers.shield, 180); // 3 seconds invulnerability
+    
+    for (const e of enemies) {
+      addScore(e.pts);
+      kills++;
+      killsMilestone++;
+      createParticles(e.x, e.y, e.color, 30);
+    }
+    enemies = [];
+    showAnnouncement("⚡ ¡FLASH NOVA! ⚡");
+  }
 
   // Touch — movement
   window.addEventListener('touchstart', (e) => {
@@ -170,6 +196,12 @@
   const fireBtn = $('fire-btn');
   fireBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); isFiring = true; }, { passive: false });
   fireBtn.addEventListener('touchend', () => { isFiring = false; });
+
+  // Ultra button
+  const ultraBtn = $('ultra-btn');
+  if (ultraBtn) {
+    ultraBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); triggerUltra(); }, { passive: false });
+  }
 
   /* =========================================================
      STARS (Background)
@@ -347,6 +379,7 @@
             addScore(e.pts + 5);
             kills++;
             killsMilestone++;
+            if (ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
             createParticles(e.x, e.y, e.color, 20);
             break;
           }
@@ -362,6 +395,7 @@
           addScore(4);
           kills++;
           killsMilestone++;
+          if (ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
         }
         dead = true;
         createParticles(e.x, e.y, e.color, 15);
@@ -659,6 +693,19 @@
     if (player.powers.speed > 0) txt += `<span style="color:#2ecc71; margin-right:8px;">[Vel ${Math.ceil(player.powers.speed / 60)}s]</span>`;
     if (player.powers.shield > 0) txt += `<span style="color:#3498db; margin-right:8px;">[Escudo ${Math.ceil(player.powers.shield / 60)}s]</span>`;
     $('power').innerHTML = txt || 'Ninguno';
+
+    const uBar = $('ultra-bar');
+    const uBtn = $('ultra-btn');
+    if (uBar) {
+      uBar.style.width = `${(ultraEnergy / ULTRA_MAX) * 100}%`;
+      if (ultraEnergy >= ULTRA_MAX) {
+        uBar.classList.add('ready');
+        if (uBtn) { uBtn.classList.remove('ultra-btn-disabled'); uBtn.classList.add('ultra-btn-ready'); }
+      } else {
+        uBar.classList.remove('ready');
+        if (uBtn) { uBtn.classList.add('ultra-btn-disabled'); uBtn.classList.remove('ultra-btn-ready'); }
+      }
+    }
   }
 
   /* =========================================================
@@ -706,6 +753,13 @@
     updateAndDrawParticles();
 
     ctx.restore();
+
+    // Flash Nova Effect
+    if (flashAlpha > 0) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      flashAlpha -= 0.03;
+    }
 
     // Frame counter
     frame++;
