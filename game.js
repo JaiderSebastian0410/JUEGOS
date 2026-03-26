@@ -15,7 +15,7 @@
   const POWER_DURATION = 480;       // frames (~8 seconds at 60fps)
   const PREMIUM_DURATION = 1500;    // frames (~25 seconds)
   const KILLS_PER_LIFE = 70;
-  const SCORE_PER_MILESTONE = 1000;
+  const SCORE_PER_MILESTONE = 1600;
   const ENEMY_UNLOCK_INTERVAL = 700;
 
   const PLAYER_BASE_SPEED = 6;
@@ -54,6 +54,11 @@
      ========================================================= */
   let audioCtx = null;
   let isSoundEnabled = true;
+  let masterVolume = 1.0;
+
+  window.updateVolume = function(val) {
+    masterVolume = parseFloat(val);
+  };
 
   window.initAudio = function() {
     if (!audioCtx && isSoundEnabled) {
@@ -81,7 +86,7 @@
         const now = audioCtx.currentTime;
         osc.frequency.setValueAtTime(freqStart, now);
         if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, now + duration);
-        gain.gain.setValueAtTime(vol, now);
+        gain.gain.setValueAtTime(vol * masterVolume, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
         osc.start(now);
         osc.stop(now + duration);
@@ -162,6 +167,8 @@
     autoShootDelay: 0,
     angle: -Math.PI / 2,
     powers: { auto: 0, manual: 0, speed: 0, shield: 0 },
+    skin: { type: 'classic', img: null },
+    debuffs: { slow: 0, disable: 0 }
   };
 
   let bullets = [];
@@ -197,6 +204,35 @@
   let isMobile = false;
   let isFiring = false;
 
+  window.selectSkin = function(type) {
+    player.skin.type = type;
+    player.skin.img = null;
+    const names = { 'classic': 'Clásica (Cyan)', 'phantom': 'Phantom', 'golden': 'Golden' };
+    const status = document.getElementById('skin-status');
+    if (status) status.innerText = 'Skin actual: ' + names[type];
+    if (window.initAudio) window.initAudio();
+    SFX.hit();
+  };
+
+  window.uploadSkin = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      const img = new Image();
+      img.onload = function() {
+        player.skin.type = 'custom';
+        player.skin.img = img;
+        const status = document.getElementById('skin-status');
+        if (status) status.innerText = 'Skin actual: Personalizada (IMG)';
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+    if (window.initAudio) window.initAudio();
+    SFX.powerup();
+  };
+
   document.addEventListener('keydown', (e) => { 
     keys[e.key] = true; 
     if ((e.key === 'q' || e.key === 'Q' || e.key === 'Shift') && ultraEnergy >= ULTRA_MAX) {
@@ -206,7 +242,7 @@
   document.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
   function triggerUltra() {
-    if (gameState !== 'PLAYING' || ultraEnergy < ULTRA_MAX) return;
+    if (gameState !== 'PLAYING' || ultraEnergy < ULTRA_MAX || player.debuffs.disable > 0) return;
     
     ultraEnergy = 0;
     flashAlpha = 1.0;
@@ -364,6 +400,8 @@
   }
 
   function handleShooting() {
+    if (player.debuffs.disable > 0) return; // Prevent shooting if disabled
+
     // Manual cannon
     if ((keys[' '] || isFiring) && player.powers.manual > 0) {
       player.powers.manual--;
@@ -412,6 +450,14 @@
     player.y += moveY;
     if (Math.hypot(moveX, moveY) > 0.1) player.angle = Math.atan2(moveY, moveX);
 
+    // Apply Slowness Debuff
+    if (player.debuffs.slow > 0) {
+      player.x -= moveX * 0.5; // Reverse half the movement
+      player.y -= moveY * 0.5;
+      player.debuffs.slow--;
+    }
+    if (player.debuffs.disable > 0) player.debuffs.disable--;
+
     player.x = clamp(player.x, player.size, WORLD.WIDTH - player.size);
     player.y = clamp(player.y, player.size, WORLD.HEIGHT - player.size);
 
@@ -457,13 +503,15 @@
     const spawnX = clamp(player.x + Math.cos(angle) * dist, 100, WORLD.WIDTH - 100);
     const spawnY = clamp(player.y + Math.sin(angle) * dist, 100, WORLD.HEIGHT - 100);
 
-    enemies.push({
+    const baseEnemy = {
       x: spawnX, y: spawnY,
       size: selectedType.size, speed: baseSpeed,
       type: selectedType.shape, color: selectedType.color,
       hp: selectedType.hp, maxHp: selectedType.hp,
       name: selectedType.name, pts: selectedType.pts,
-    });
+      spellTimer: 0
+    };
+    enemies.push(baseEnemy);
   }
 
   /* =========================================================
@@ -482,12 +530,42 @@
         e.y += (dy / dist) * e.speed;
       }
 
+      // Enemy spell shooting (Pulsar and Overlord)
+      if (e.name === 'Pulsar' || e.name === 'Overlord') {
+        e.spellTimer++;
+        if (e.spellTimer > 180) { // Every 3 seconds
+          bullets.push({
+            x: e.x, y: e.y,
+            dx: -(dx / dist) * 4, dy: -(dy / dist) * 4,
+            color: '#a349a4', // Purple spell
+            source: 'enemy_spell'
+          });
+          e.spellTimer = 0;
+        }
+      }
+
       let dead = false;
 
       // Bullet collision
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
-        if (Math.abs(b.x - e.x) < e.size && Math.abs(b.y - e.y) < e.size) {
+        if (b.source === 'enemy_spell') {
+          // Check collision with player
+          const pdx = player.x - b.x;
+          const pdy = player.y - b.y;
+          if (Math.hypot(pdx, pdy) < player.size) {
+            bullets.splice(i, 1);
+            if (player.powers.shield <= 0) {
+              const type = Math.random() > 0.5 ? 'slow' : 'disable';
+              player.debuffs[type] = 180; // 3 seconds
+              showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
+              SFX.play(200, 100, 'sawtooth', 0.5, 0.4);
+            }
+            continue;
+          }
+        }
+
+        if (b.source !== 'enemy_spell' && Math.abs(b.x - e.x) < e.size && Math.abs(b.y - e.y) < e.size) {
           bullets.splice(i, 1);
           e.hp--;
           createParticles(b.x, b.y, '#ffffff', 4);
@@ -626,24 +704,64 @@
     ctx.translate(player.x, player.y);
     ctx.rotate(player.angle + Math.PI / 2);
 
+    // Custom Image Skin
+    if (player.skin.type === 'custom' && player.skin.img) {
+      const s = player.size * 2;
+      ctx.drawImage(player.skin.img, -s/2, -s/2, s, s);
+      ctx.restore();
+      // Draw shield separate
+      if (player.powers.shield > 0) {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.beginPath();
+        ctx.arc(0, 0, player.size + 15, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+      }
+      return;
+    }
+
     let pColor = '#00ffff';
+    if (player.skin.type === 'phantom') pColor = '#9b59b6';
+    else if (player.skin.type === 'golden') pColor = '#f1c40f';
+    
+    // Power overrides skin color temporarily
     if (player.powers.auto > 0) pColor = '#f7ca18';
     else if (player.powers.manual > 0) pColor = '#e67e22';
 
     ctx.shadowBlur = 20;
     ctx.shadowColor = pColor;
-    ctx.fillStyle = '#101015';
+    ctx.fillStyle = player.skin.type === 'phantom' ? 'rgba(20, 10, 30, 0.8)' : '#101015';
     ctx.strokeStyle = pColor;
     ctx.lineWidth = 2.5;
 
     ctx.beginPath();
-    ctx.moveTo(0, -player.size);
-    ctx.lineTo(player.size * 0.8, player.size);
-    ctx.lineTo(0, player.size - 6);
-    ctx.lineTo(-player.size * 0.8, player.size);
+    if (player.skin.type === 'golden') {
+      // Sleek Diamond shape for Golden
+      ctx.moveTo(0, -player.size * 1.2);
+      ctx.lineTo(player.size, 0);
+      ctx.lineTo(0, player.size * 1.2);
+      ctx.lineTo(-player.size, 0);
+    } else {
+      ctx.moveTo(0, -player.size);
+      ctx.lineTo(player.size * 0.8, player.size);
+      ctx.lineTo(0, player.size - 6);
+      ctx.lineTo(-player.size * 0.8, player.size);
+    }
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+
+    // Phantom wing trails
+    if (player.skin.type === 'phantom') {
+      ctx.strokeStyle = 'rgba(155, 89, 182, 0.4)';
+      ctx.beginPath();
+      ctx.moveTo(-player.size, 10); ctx.lineTo(-player.size * 1.5, 25);
+      ctx.moveTo(player.size, 10); ctx.lineTo(player.size * 1.5, 25);
+      ctx.stroke();
+    }
 
     // Shield aura
     if (player.powers.shield > 0) {
@@ -653,6 +771,16 @@
       ctx.shadowColor = '#3498db';
       ctx.lineWidth = 3;
       ctx.stroke();
+    }
+    
+    // Debuff visual
+    if (player.debuffs.slow > 0 || player.debuffs.disable > 0) {
+      ctx.beginPath();
+      ctx.arc(0, 0, player.size + 10, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(163, 73, 164, 0.6)';
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     ctx.restore();
@@ -823,6 +951,11 @@
     if (player.powers.manual > 0) txt += `<span style="color:#e67e22; margin-right:8px;">[Manual ${Math.ceil(player.powers.manual / 60)}s]</span>`;
     if (player.powers.speed > 0) txt += `<span style="color:#2ecc71; margin-right:8px;">[Vel ${Math.ceil(player.powers.speed / 60)}s]</span>`;
     if (player.powers.shield > 0) txt += `<span style="color:#3498db; margin-right:8px;">[Escudo ${Math.ceil(player.powers.shield / 60)}s]</span>`;
+    
+    // Debuffs in UI
+    if (player.debuffs.slow > 0) txt += `<span style="color:#a349a4; margin-right:8px;">[V-LENTA]</span>`;
+    if (player.debuffs.disable > 0) txt += `<span style="color:#ff3366; margin-right:8px;">[BLOQUEO]</span>`;
+    
     $('power').innerHTML = txt || 'Ninguno';
 
     const uBar = $('ultra-bar');

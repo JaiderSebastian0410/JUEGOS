@@ -55,6 +55,22 @@
   <!-- Welcome Menu -->
   <div id="start-menu" class="overlay active">
     <h1 style="color: #00ffff;">SPACE DEFENDER</h1>
+    
+    <div style="margin-bottom: 20px; background: rgba(0,255,255,0.05); padding: 15px; border-radius: 8px; width: 100%; max-width: 450px;">
+      <h3 style="margin: 0 0 10px 0; color: #00ffff; font-size: 1rem;">Seleccionar Clase de Nave / Skin</h3>
+      <div style="display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap;">
+        <button class="btn skin-btn" style="min-width:auto; padding: 10px 15px; font-size:0.8rem;" onclick="selectSkin('classic')">Clásica (Cyan)</button>
+        <button class="btn skin-btn" style="min-width:auto; padding: 10px 15px; font-size:0.8rem; border-color:#9b59b6; color:#9b59b6;" onclick="selectSkin('phantom')">Phantom</button>
+        <button class="btn skin-btn" style="min-width:auto; padding: 10px 15px; font-size:0.8rem; border-color:#f1c40f; color:#f1c40f;" onclick="selectSkin('golden')">Golden</button>
+        
+        <label class="btn skin-btn" style="min-width:auto; padding: 10px 15px; font-size:0.8rem; cursor:pointer;" title="Sube una imagen plana desde tu dispositivo.">
+          🖼️ Añadir IMG
+          <input type="file" id="skin-upload" accept="image/*" style="display:none;" onchange="uploadSkin(event)">
+        </label>
+      </div>
+      <p id="skin-status" style="font-size:0.8rem; margin: 10px 0 0; color: #aaa;">Skin actual: Clásica</p>
+    </div>
+
     <p style="margin-bottom: 10px;">Selecciona la dificultad para Iniciar:</p>
     <div class="btn-group" style="margin-bottom: 20px;">
       <button class="btn" style="min-width:120px; font-size: 0.9rem;" onclick="startGame('facil')">Fácil</button>
@@ -72,10 +88,14 @@
   <!-- Settings Menu -->
   <div id="settings-menu" class="overlay">
     <h1 style="color: #f1c40f;">⚙️ CONFIGURACIÓN</h1>
-    <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; width: 100%; max-width: 400px; margin-bottom: 20px;">
+    <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; width: 100%; max-width: 400px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px;">
       <label style="display: flex; align-items: center; justify-content: space-between; font-size: 1.2rem; cursor: pointer;">
         <span>🔊 Efectos de Sonido</span>
         <input type="checkbox" id="sound-toggle" checked style="width: 25px; height: 25px;" onchange="toggleSound()">
+      </label>
+      <label style="display: flex; flex-direction: column; font-size: 1rem; gap: 10px; text-align: left;">
+        <span>Volumen Maestro: <span id="vol-label" style="color:cyan;">100%</span></span>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.1" value="1" onchange="updateVolume(this.value)" oninput="document.getElementById('vol-label').innerText = Math.round(this.value * 100) + '%'">
       </label>
     </div>
     <div class="btn-group">
@@ -104,7 +124,7 @@
               <li><strong>Escudo Prisma (⬢):</strong> Hexágono azul. Invulnerabilidad total.</li>
             </ul>
           </li>
-          <li><strong>⚡ Flash Nova (Ultra):</strong> Se carga consiguiendo Kills. Extermina todos los enemigos en pantalla. Úsalo con la tecla <strong>Q</strong> o <strong>Shift</strong>, o tocando el botón ⚡ en móvil.</li>
+          <li><strong>⚡ Flash Nova (Ultra):</strong> <span style="color:#ff007f;">¿CÓMO USARLO?</span> Se carga destrozando a 100 enemigos. Una vez lista (la barra parpadeará), pulsa <strong>Q</strong>, <strong>Shift</strong> o el botón táctil ⚡ en móvil. Creará un flash abrasador que calcinará a <strong>TODOS</strong> los enemigos en pantalla instantáneamente. Recibirás tu puntuación base multiplicada x2.0 por cada muerte y un Escudo Prisma de emergencia por 3 segundos para que no mueras apenas reaparezcan los siguientes monstruos.</li>
           <li><strong>Acumulativos:</strong> Recoger el mismo poder varias veces <strong>suma</strong> su duración restante.</li>
           <li><strong>Cañón Manual:</strong> Solo consume su "munición" cuando mantienes <strong>Espacio</strong> o el botón 🔥.</li>
           <li><strong>Escudo Prisma:</strong> Además de protegerte, chocar contra enemigos los destruye y cuenta como Kill.</li>
@@ -142,7 +162,8 @@
         <h2>Reglas de Misión</h2>
         <ul>
           <li><strong>Módulos de Vida:</strong> Cada <strong>70 enemigos derrotados</strong>, tu nave recibe un módulo de vida extra.</li>
-          <li><strong>Bonus de Score:</strong> Al alcanzar intervalos de <strong>1000 puntos</strong>, podrás elegir una Mejora Premium de larga duración (25s).</li>
+          <li><strong>Bonus Premium:</strong> Al alcanzar intervalos de <strong>1600 puntos</strong>, detendrás el tiempo y podrás elegir una Mejora Premium de larga duración (25s) para dominar el tablero.</li>
+          <li><strong>Hechizos Enemigos:</strong> Algunos enemigos disparan hechizos morados. Si te impactan, puedes sufrir <strong>Lentitud</strong> (tu nave pesa el doble) o <strong>Bloqueo de Poder</strong> (no podrás disparar rápido).</li>
           <li><strong>Vidas Extra Escasas:</strong> Los corazones aparecen raramente y desaparecen en pocos segundos. ¡Aprovecha cuando los veas!</li>
         </ul>
       </div>
