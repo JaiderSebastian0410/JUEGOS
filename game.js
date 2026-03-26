@@ -176,13 +176,32 @@
     phantom: new Image(),
     golden: new Image()
   };
+  
+  // Background-cleaning helper for default assets
+  function cleanWhiteBG(img, callback) {
+    const c = document.createElement('canvas');
+    c.width = img.width || 512; c.height = img.height || 512;
+    const ctx2 = c.getContext('2d');
+    ctx2.drawImage(img, 0, 0);
+    const id = ctx2.getImageData(0, 0, c.width, c.height);
+    const d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 245 && d[i+1] > 245 && d[i+2] > 245) d[i+3] = 0;
+    }
+    ctx2.putImageData(id, 0, 0);
+    const ni = new Image(); ni.onload = callback; ni.src = c.toDataURL();
+    return ni;
+  }
+
+  SKINS.classic.onload = () => { SKINS.classic = cleanWhiteBG(SKINS.classic, updatePreview); };
+  SKINS.phantom.onload = () => { SKINS.phantom = cleanWhiteBG(SKINS.phantom, updatePreview); };
+  SKINS.golden.onload = () => { SKINS.golden = cleanWhiteBG(SKINS.golden, updatePreview); };
+  
   SKINS.classic.src = 'skin_classic.png';
   SKINS.phantom.src = 'skin_phantom.png';
   SKINS.golden.src = 'skin_golden.png';
 
-  // Ensure preview is updated once loaded
-  const updatePreview = () => { if(gameState === 'MENU') selectSkin(player.skin.type); };
-  Object.values(SKINS).forEach(img => img.onload = updatePreview);
+  function updatePreview() { if(gameState === 'MENU') selectSkin(player.skin.type); }
 
   let bullets = [];
   let enemies = [];
@@ -199,10 +218,15 @@
   let killsMilestone = 0;
   let scoreMilestone = 0;
   let unlockedEnemies = 1;
+  let isRecordBroken = false;
 
   let selectedDifficulty = 'progresivo';
+  let isPractice = false;
   let diffMultiplier = 1.0;
   let floatingTexts = [];
+  
+  let shakeAmt = 0;
+  let damageFlash = 0;
 
   const ULTRA_MAX = 100; // Requires 100 kills to charge
   let ultraEnergy = 0;
@@ -652,8 +676,11 @@
       // Player collision
       if (!dead && dist < (player.size + e.size) * 0.7) {
         if (player.powers.shield <= 0) {
-          player.vida--;
-          createParticles(player.x, player.y, '#00ffff', 30);
+          if (!isPractice) player.vida--;
+          damageFlash = 1.0;
+          shakeAmt = 20; 
+          createParticles(player.x, player.y, '#ff3366', 30);
+          SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
         } else {
           const shieldPts = Math.ceil(e.pts * diffMultiplier * 0.5); // Shield kill = half points
           addScore(shieldPts);
@@ -717,8 +744,9 @@
       const h = hearts[i];
       h.time--;
       if (hypot(player.x - h.x, player.y - h.y) < player.size + 15) {
-        player.vida++;
-        createParticles(h.x, h.y, '#ff007f', 15);
+        if (!isPractice) player.vida++;
+        createParticles(h.x, h.y, '#ff007f', 40);
+        createFloatingText(h.x, h.y, "❤ +1 VIDA", "#ff007f");
         SFX.powerup();
         hearts.splice(i, 1);
         continue;
@@ -733,14 +761,25 @@
   function checkMilestones() {
     if (killsMilestone >= KILLS_PER_LIFE) {
       killsMilestone -= KILLS_PER_LIFE;
-      player.vida++;
+      if (!isPractice) player.vida++;
       createParticles(player.x, player.y, '#ff007f', 40);
+      createFloatingText(player.x, player.y, "❤ EXTRA!", "#ff007f");
       SFX.powerup();
     }
     if (scoreMilestone >= SCORE_PER_MILESTONE) {
       scoreMilestone -= SCORE_PER_MILESTONE;
+      if (gameState !== 'PLAYING') return; 
       gameState = 'CHOOSING';
       $('levelup-menu').classList.add('active');
+    }
+    
+    // Record broken animation
+    const records = Storage.load();
+    if (score > records.score && !isRecordBroken && records.score > 0) {
+      isRecordBroken = true;
+      showAnnouncement("🏆 ¡NUEVO RÉCORD ESTABLECIDO! 🏆");
+      SFX.powerup();
+      shakeAmt = 15;
     }
   }
 
@@ -1004,7 +1043,11 @@
      HUD UPDATE
      ========================================================= */
   function updateUI() {
-    $('vida').innerText = player.vida;
+    if (isPractice) {
+      $('vida').innerText = '∞';
+    } else {
+      $('vida').innerText = player.vida;
+    }
     $('kills').innerText = kills;
     $('score').innerText = score;
     $('time').innerText = time;
@@ -1045,6 +1088,13 @@
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
+    
+    // Apply Shake
+    if (shakeAmt > 0) {
+      ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
+      shakeAmt *= 0.9;
+    }
+
     ctx.translate(-camera.x, -camera.y);
 
     // Stars
@@ -1082,6 +1132,13 @@
 
     ctx.restore();
 
+    // Damage Flash
+    if (damageFlash > 0) {
+      ctx.fillStyle = `rgba(255, 0, 50, ${damageFlash * 0.4})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      damageFlash -= 0.05;
+    }
+
     // Flash Nova Effect
     if (flashAlpha > 0) {
       ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
@@ -1116,8 +1173,11 @@
   window.startGame = function(diff) {
     if (window.initAudio) window.initAudio();
     selectedDifficulty = diff;
+    isPractice = (diff === 'practica');
+    isRecordBroken = false;
     
     switch(diff) {
+      case 'practica': diffMultiplier = 0.2; spawnRate = 140; player.vida = 999; break;
       case 'facil': diffMultiplier = 0.5; spawnRate = 150; break;
       case 'medio': diffMultiplier = 1.0; spawnRate = 100; break;
       case 'dificil': diffMultiplier = 1.5; spawnRate = 80; break;
@@ -1128,6 +1188,28 @@
 
     // Trigger initial preview draw
     setTimeout(drawPreview, 100);
+  };
+
+  window.pauseGame = function(state) {
+    if (gameState === 'GAMEOVER') return;
+    if (state) {
+      gameState = 'CHOOSING'; // Reusing Choosing state to pause loop
+      $('pause-menu').classList.add('active');
+    } else {
+      $('pause-menu').classList.remove('active');
+      gameState = 'PLAYING';
+      requestAnimationFrame(gameLoop);
+    }
+  };
+
+  window.exitGame = function() {
+    location.reload(); // Simple exit
+  };
+
+  window.toggleSoundFromPause = function(cb) {
+    const mainToggle = $('sound-toggle');
+    if (mainToggle) mainToggle.checked = cb.checked;
+    window.toggleSound();
   };
 
   window.openSettings = function() {
@@ -1143,7 +1225,9 @@
   function startCountdown() {
     $('start-menu').classList.remove('active');
     $('settings-menu').classList.remove('active');
+    $('pause-menu').classList.remove('active');
     $('tutorial-menu-overlay').classList.remove('active');
+    $('pause-btn').style.display = 'block';
     const countEl = $('countdown');
     countEl.style.display = 'block';
     let count = 3;

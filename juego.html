@@ -80,6 +80,7 @@
 
     <p style="margin-bottom: 10px;">Selecciona la dificultad para Iniciar:</p>
     <div class="btn-group" style="margin-bottom: 20px;">
+      <button class="btn" style="min-width:120px; font-size: 0.9rem; border-color:#2ecc71; color:#2ecc71;" onclick="startGame('practica')">Práctica</button>
       <button class="btn" style="min-width:120px; font-size: 0.9rem;" onclick="startGame('facil')">Fácil</button>
       <button class="btn" style="min-width:120px; font-size: 0.9rem;" onclick="startGame('medio')">Medio</button>
       <button class="btn" style="min-width:120px; font-size: 0.9rem;" onclick="startGame('dificil')">Difícil</button>
@@ -201,6 +202,24 @@
   </div>
 
   <!-- Level Up / Score Milestone Menu -->
+  <!-- Pause Button (HUD) -->
+  <button id="pause-btn" style="position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.4); border: 1px solid #00ffff; color: #00ffff; width: 50px; height: 50px; border-radius: 50%; font-size: 1.5rem; cursor: pointer; display: none; z-index: 100;" onclick="pauseGame(true)">||</button>
+
+  <!-- Pause Menu -->
+  <div id="pause-menu" class="overlay">
+    <h1 style="color: #00ffff;">PAUSA</h1>
+    <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; width: 100%; max-width: 350px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px;">
+      <button class="btn" onclick="pauseGame(false)">Reanudar</button>
+      
+      <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+        <span>🔊 Sonido</span>
+        <input type="checkbox" id="pause-sound-toggle" checked style="width: 20px; height: 20px;" onchange="toggleSoundFromPause(this)">
+      </div>
+      
+      <button class="btn secondary" style="border-color: #ff3366; color: #ff3366;" onclick="exitGame()">Salir al Menú</button>
+    </div>
+  </div>
+
   <div id="levelup-menu" class="overlay">
     <h1 style="color: #f1c40f;">¡PUNTUACIÓN DESTACADA!</h1>
     <p>Has alcanzado 1000 puntos. Elige una mejora premium prolongada (25s):</p>
