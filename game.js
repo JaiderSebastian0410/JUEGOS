@@ -50,6 +50,52 @@
   const $ = (id) => document.getElementById(id);
 
   /* =========================================================
+     AUDIO SYNTHESIZER
+     ========================================================= */
+  let audioCtx = null;
+  let isSoundEnabled = true;
+
+  window.initAudio = function() {
+    if (!audioCtx && isSoundEnabled) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) audioCtx = new AudioContext();
+    }
+  };
+
+  window.toggleSound = function() {
+    const check = $('sound-toggle');
+    isSoundEnabled = check ? check.checked : true;
+    if (isSoundEnabled) window.initAudio();
+  };
+
+  const SFX = {
+    play(freqStart, freqEnd, type, duration, vol) {
+      if (!isSoundEnabled || !audioCtx) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        const now = audioCtx.currentTime;
+        osc.frequency.setValueAtTime(freqStart, now);
+        if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, now + duration);
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+        osc.start(now);
+        osc.stop(now + duration);
+      } catch(e) {}
+    },
+    shootManual() { this.play(600, 300, 'square', 0.1, 0.2); },
+    shootAuto() { this.play(800, 500, 'sawtooth', 0.05, 0.1); },
+    hit() { this.play(150, 50, 'sawtooth', 0.1, 0.3); },
+    kill() { this.play(100, 20, 'square', 0.2, 0.4); },
+    powerup() { this.play(400, 800, 'sine', 0.2, 0.3); setTimeout(() => this.play(800, 1200, 'sine', 0.3, 0.3), 100); },
+    ultra() { this.play(800, 50, 'sawtooth', 1.5, 0.6); }
+  };
+
+  /* =========================================================
      LOCALSTORAGE MANAGER (Robust)
      ========================================================= */
   const Storage = {
@@ -134,6 +180,10 @@
   let scoreMilestone = 0;
   let unlockedEnemies = 1;
 
+  let selectedDifficulty = 'progresivo';
+  let diffMultiplier = 1.0;
+  let floatingTexts = [];
+
   const ULTRA_MAX = 100; // Requires 100 kills to charge
   let ultraEnergy = 0;
   let flashAlpha = 0;
@@ -163,12 +213,15 @@
     player.powers.shield = Math.max(player.powers.shield, 180); // 3 seconds invulnerability
     
     for (const e of enemies) {
-      addScore(e.pts);
+      const ultraPts = Math.ceil((e.pts + 5) * diffMultiplier * 2.0);
+      addScore(ultraPts);
       kills++;
       killsMilestone++;
       createParticles(e.x, e.y, e.color, 30);
+      createFloatingText(e.x, e.y, `+${ultraPts}`, '#ff007f');
     }
     enemies = [];
+    SFX.ultra();
     showAnnouncement("⚡ ¡FLASH NOVA! ⚡");
   }
 
@@ -264,15 +317,42 @@
   }
 
   /* =========================================================
+     FLOATING TEXTS
+     ========================================================= */
+  function createFloatingText(x, y, text, color) {
+    floatingTexts.push({ x, y, text, color, life: 1.0, dy: -1 });
+  }
+
+  function updateAndDrawFloatingTexts() {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 16px Orbitron';
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+      const ft = floatingTexts[i];
+      ft.y += ft.dy;
+      ft.life -= 0.02;
+      if (ft.life <= 0) { floatingTexts.splice(i, 1); continue; }
+      
+      ctx.globalAlpha = ft.life;
+      ctx.fillStyle = ft.color;
+      ctx.shadowBlur = 5;
+      ctx.shadowColor = ft.color;
+      ctx.fillText(ft.text, ft.x, ft.y);
+    }
+    ctx.restore();
+  }
+
+  /* =========================================================
      SHOOTING
      ========================================================= */
-  function shoot(speed, color) {
+  function shoot(speed, color, source) {
     bullets.push({
       x: player.x,
       y: player.y,
       dx: Math.cos(player.angle) * Math.abs(speed),
       dy: Math.sin(player.angle) * Math.abs(speed),
       color,
+      source
     });
   }
 
@@ -280,13 +360,13 @@
     // Manual cannon
     if ((keys[' '] || isFiring) && player.powers.manual > 0) {
       player.powers.manual--;
-      if (frame % 8 === 0) shoot(16, '#e67e22');
+      if (frame % 8 === 0) { shoot(16, '#e67e22', 'manual'); SFX.shootManual(); }
     }
     // Auto laser
     if (player.powers.auto > 0) {
       player.autoShootDelay++;
       if (player.autoShootDelay > 6) {
-        shoot(14, '#f7ca18');
+        shoot(14, '#f7ca18', 'auto'); SFX.shootAuto();
         player.autoShootDelay = 0;
       }
     }
@@ -406,12 +486,20 @@
           createParticles(b.x, b.y, '#ffffff', 4);
           if (e.hp <= 0) {
             dead = true;
-            addScore(e.pts + 5);
+            let multiplier = (b.source === 'manual') ? 1.5 : 1.0;
+            multiplier *= diffMultiplier; // Difficulty modifier
+            const pts = Math.ceil((e.pts + 5) * multiplier);
+            
+            addScore(pts);
             kills++;
             killsMilestone++;
             if (ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
             createParticles(e.x, e.y, e.color, 20);
+            createFloatingText(e.x, e.y, `+${pts}`, '#f1c40f');
+            SFX.kill();
             break;
+          } else {
+            SFX.hit();
           }
         }
       }
@@ -422,10 +510,13 @@
           player.vida--;
           createParticles(player.x, player.y, '#00ffff', 30);
         } else {
-          addScore(4);
+          const shieldPts = Math.ceil(e.pts * diffMultiplier * 0.5); // Shield kill = half points
+          addScore(shieldPts);
           kills++;
           killsMilestone++;
           if (ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
+          createFloatingText(e.x, e.y, `+${shieldPts}`, '#3498db');
+          SFX.kill();
         }
         dead = true;
         createParticles(e.x, e.y, e.color, 15);
@@ -470,6 +561,7 @@
       if (hypot(player.x - p.x, player.y - p.y) < player.size + 15) {
         player.powers[p.type] += POWER_DURATION;
         createParticles(p.x, p.y, p.color, 30);
+        SFX.powerup();
         powerUps.splice(i, 1);
         continue;
       }
@@ -482,6 +574,7 @@
       if (hypot(player.x - h.x, player.y - h.y) < player.size + 15) {
         player.vida++;
         createParticles(h.x, h.y, '#ff007f', 15);
+        SFX.powerup();
         hearts.splice(i, 1);
         continue;
       }
@@ -497,6 +590,7 @@
       killsMilestone -= KILLS_PER_LIFE;
       player.vida++;
       createParticles(player.x, player.y, '#ff007f', 40);
+      SFX.powerup();
     }
     if (scoreMilestone >= SCORE_PER_MILESTONE) {
       scoreMilestone -= SCORE_PER_MILESTONE;
@@ -781,6 +875,7 @@
     drawCollectibles();
     drawPlayer();
     updateAndDrawParticles();
+    updateAndDrawFloatingTexts();
 
     ctx.restore();
 
@@ -796,7 +891,11 @@
     if (frame % 60 === 0) {
       time++;
       addScore(8);
-      if (spawnRate > 60) spawnRate -= 0.5; // Reverted to original comfortable difficulty
+      if (selectedDifficulty === 'progresivo') {
+        if (spawnRate > 60) spawnRate -= 0.5;
+      } else {
+        if (spawnRate > 50) spawnRate -= 0.2; // Slow gradual progression for static diffs
+      }
     }
 
     updateUI();
@@ -811,8 +910,33 @@
   /* =========================================================
      MENU LOGIC
      ========================================================= */
+  window.startGame = function(diff) {
+    if (window.initAudio) window.initAudio();
+    selectedDifficulty = diff;
+    
+    switch(diff) {
+      case 'facil': diffMultiplier = 0.5; spawnRate = 150; break;
+      case 'medio': diffMultiplier = 1.0; spawnRate = 100; break;
+      case 'dificil': diffMultiplier = 1.5; spawnRate = 80; break;
+      case 'hardcore': diffMultiplier = 2.5; spawnRate = 60; player.vida = 1; break;
+      case 'progresivo': diffMultiplier = 1.0; spawnRate = 120; break;
+    }
+    startCountdown();
+  };
+
+  window.openSettings = function() {
+    $('start-menu').classList.remove('active');
+    $('settings-menu').classList.add('active');
+  };
+
+  window.closeSettings = function() {
+    $('settings-menu').classList.remove('active');
+    $('start-menu').classList.add('active');
+  };
+
   function startCountdown() {
     $('start-menu').classList.remove('active');
+    $('settings-menu').classList.remove('active');
     $('tutorial-menu-overlay').classList.remove('active');
     const countEl = $('countdown');
     countEl.style.display = 'block';
@@ -858,6 +982,7 @@
     }
     createParticles(player.x, player.y, '#ffffff', 50);
     $('levelup-menu').classList.remove('active');
+    SFX.powerup();
     gameState = 'PLAYING';
     requestAnimationFrame(gameLoop);
   }

@@ -55,10 +55,31 @@
   <!-- Welcome Menu -->
   <div id="start-menu" class="overlay active">
     <h1 style="color: #00ffff;">SPACE DEFENDER</h1>
-    <p>¡Bienvenido, cadete! Defiende la frontera galáctica en este simulador de combate de alto riesgo. Explora un mapa vasto, derrota enemigos de élite y gestiona tus suministros tácticos para sobrevivir.</p>
+    <p style="margin-bottom: 10px;">Selecciona la dificultad para Iniciar:</p>
+    <div class="btn-group" style="margin-bottom: 20px;">
+      <button class="btn" style="min-width:120px; font-size: 0.9rem;" onclick="startGame('facil')">Fácil</button>
+      <button class="btn" style="min-width:120px; font-size: 0.9rem;" onclick="startGame('medio')">Medio</button>
+      <button class="btn" style="min-width:120px; font-size: 0.9rem;" onclick="startGame('dificil')">Difícil</button>
+      <button class="btn" style="min-width:120px; font-size: 0.9rem; border-color:#ff3366; color:#ff3366" onclick="startGame('hardcore')">Hardcore</button>
+      <button class="btn" style="min-width:120px; font-size: 0.9rem;" onclick="startGame('progresivo')">Progresivo</button>
+    </div>
     <div class="btn-group">
-      <button class="btn" onclick="startCountdown()">¡A Jugar!</button>
       <button class="btn secondary" onclick="openTutorial()">Tutorial</button>
+      <button class="btn secondary" onclick="openSettings()">⚙️ Config</button>
+    </div>
+  </div>
+
+  <!-- Settings Menu -->
+  <div id="settings-menu" class="overlay">
+    <h1 style="color: #f1c40f;">⚙️ CONFIGURACIÓN</h1>
+    <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; width: 100%; max-width: 400px; margin-bottom: 20px;">
+      <label style="display: flex; align-items: center; justify-content: space-between; font-size: 1.2rem; cursor: pointer;">
+        <span>🔊 Efectos de Sonido</span>
+        <input type="checkbox" id="sound-toggle" checked style="width: 25px; height: 25px;" onchange="toggleSound()">
+      </label>
+    </div>
+    <div class="btn-group">
+      <button class="btn" onclick="closeSettings()">Guardar</button>
     </div>
   </div>
 
@@ -128,7 +149,6 @@
 
       <div class="tutorial-footer">
         <button class="btn secondary" style="min-width: 120px;" onclick="closeTutorial()">Atrás</button>
-        <button class="btn" style="min-width: 120px;" onclick="startCountdown()">¡Listo!</button>
       </div>
     </div>
   </div>
