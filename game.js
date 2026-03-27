@@ -104,18 +104,18 @@
      LOCALSTORAGE MANAGER (Robust)
      ========================================================= */
   const Storage = {
-    _defaults: Object.freeze({ score: 0, kills: 0, average: 0, gamesPlayed: 0 }),
+    _defaults: Object.freeze({ score: 0, kills: 0, average: 0, time: 0, gamesPlayed: 0 }),
 
-    load() {
+    load(mode = 'general') {
       try {
-        const raw = localStorage.getItem(SAVE_KEY);
+        const raw = localStorage.getItem(`${SAVE_KEY}_${mode}`);
         if (!raw) return { ...this._defaults };
         const data = JSON.parse(raw);
-        // Validate shape
         return {
           score: Number(data.score) || 0,
           kills: Number(data.kills) || 0,
           average: Number(data.average) || 0,
+          time: Number(data.time) || 0,
           gamesPlayed: Number(data.gamesPlayed) || 0,
         };
       } catch {
@@ -124,16 +124,20 @@
       }
     },
 
-    save(records) {
+    save(mode, records) {
       try {
-        localStorage.setItem(SAVE_KEY, JSON.stringify(records));
+        localStorage.setItem(`${SAVE_KEY}_${mode}`, JSON.stringify(records));
       } catch (err) {
         console.warn('[Storage] Failed to save:', err.message);
       }
     },
 
     reset() {
-      try { localStorage.removeItem(SAVE_KEY); } catch { /* noop */ }
+      try { 
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith(SAVE_KEY)) localStorage.removeItem(key);
+        });
+      } catch { /* noop */ }
     },
   };
 
@@ -418,10 +422,13 @@
       });
     }
   }
-
-  function updateAndDrawParticles() {
+    function updateAndDrawParticles() {
     ctx.save();
-    ctx.shadowBlur = 0; // Prevent heavy shadow lag on particles
+    if (isMobile) {
+      ctx.shadowBlur = 0; 
+    } else {
+      ctx.shadowBlur = 0; // Prevent heavy shadow lag on particles anyway
+    }
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
       p.x += p.vx;
@@ -534,7 +541,19 @@
 
     player.x += moveX;
     player.y += moveY;
-    if (Math.hypot(moveX, moveY) > 0.1) player.angle = Math.atan2(moveY, moveX);
+    
+    // Smooth angle interpolation
+    if (Math.hypot(moveX, moveY) > 0.1) {
+      const targetAngle = Math.atan2(moveY, moveX);
+      const angleDiff = targetAngle - player.angle;
+      
+      // Normalize angle difference to [-PI, PI]
+      let normalizedDiff = ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+      
+      // Rotation speed: faster for drastic changes, smooth for continuous
+      const lerpFactor = Math.abs(normalizedDiff) > 1.5 ? 1.0 : 0.15;
+      player.angle += normalizedDiff * lerpFactor;
+    }
 
     // Apply Slowness Debuff
     if (player.debuffs.slow > 0) {
@@ -815,7 +834,7 @@
     }
     
     // Record broken animation
-    const records = Storage.load();
+    const records = Storage.load(selectedDifficulty);
     if (score > records.score && !isRecordBroken && records.score > 0) {
       isRecordBroken = true;
       showAnnouncement("🏆 ¡NUEVO RÉCORD ESTABLECIDO! 🏆");
@@ -881,8 +900,10 @@
     if (pObj.powers.auto > 0) pColor = '#f7ca18';
     else if (pObj.powers.manual > 0) pColor = '#e67e22';
 
-    targetCtx.shadowBlur = 20;
-    targetCtx.shadowColor = pColor;
+    if (!isMobile) {
+      targetCtx.shadowBlur = 20;
+      targetCtx.shadowColor = pColor;
+    }
     targetCtx.fillStyle = '#101015';
     targetCtx.strokeStyle = pColor;
     targetCtx.lineWidth = 2.5;
@@ -916,7 +937,10 @@
       targetCtx.beginPath();
       targetCtx.arc(0, 0, pObj.size + 15, 0, Math.PI * 2);
       targetCtx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
-      targetCtx.shadowColor = '#3498db';
+      if (!isMobile) {
+        targetCtx.shadowColor = '#3498db';
+        targetCtx.shadowBlur = 20;
+      }
       targetCtx.lineWidth = 3;
       targetCtx.stroke();
     }
@@ -984,9 +1008,11 @@
      ========================================================= */
   function drawEntities() {
     // Bullets
-    ctx.shadowBlur = 10;
+    if (!isMobile) ctx.shadowBlur = 10;
+    else ctx.shadowBlur = 0;
+
     for (const b of bullets) {
-      ctx.shadowColor = b.color;
+      if (!isMobile) ctx.shadowColor = b.color;
       ctx.fillStyle = b.color;
       ctx.fillRect(b.x - 2, b.y - 2, 4, 4);
     }
@@ -995,11 +1021,13 @@
     for (const e of enemies) {
       ctx.save();
       ctx.translate(e.x, e.y);
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = e.color;
+      if (!isMobile) {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = e.color;
+      }
       ctx.strokeStyle = e.color;
       
-      // Elegant and compact look: thin wireframe with semi-transparent core
+      // Elegant and compact look
       ctx.fillStyle = 'rgba(10, 10, 20, 0.9)';
       ctx.lineWidth = 1.5;
       ctx.rotate(frame * 0.04 * (e.speed > 2.0 ? 2 : 1));
@@ -1010,11 +1038,13 @@
       ctx.stroke();
 
       // Draw inner glowing core
-      ctx.beginPath();
-      drawEnemyShape(e.type, e.size * 0.4);
-      ctx.fillStyle = e.color;
-      ctx.shadowBlur = 20;
-      ctx.fill();
+      if (!isMobile) {
+        ctx.beginPath();
+        drawEnemyShape(e.type, e.size * 0.4);
+        ctx.fillStyle = e.color;
+        ctx.shadowBlur = 20;
+        ctx.fill();
+      }
       
       ctx.restore();
 
@@ -1036,8 +1066,10 @@
     const size = 10 + pulse * 0.5;
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = p.color;
+    if (!isMobile) {
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = p.color;
+    }
     ctx.strokeStyle = p.color;
     ctx.lineWidth = 3;
 
@@ -1343,35 +1375,46 @@
     $('game-over-menu').classList.add('active');
     $('pause-btn').style.display = 'none';
     
-    const records = Storage.load();
+    const records = Storage.load(selectedDifficulty);
     records.gamesPlayed++;
     const currentAvg = kills > 0 ? parseFloat((score / kills).toFixed(1)) : 0;
-    let newRecord = false;
+    
+    // Validation for new record: only if it's strictly better than the past
+    const isNewScore = score > records.score;
+    const isNewKills = kills > records.kills;
+    const isNewAvg = currentAvg > records.average;
+    const isNewTime = time > records.time;
+    
+    const anyNewRecord = isNewScore || isNewKills || isNewAvg || isNewTime;
 
-    const results = {
-      score: { current: score, best: records.score, label: 'Mejor Score' },
-      kills: { current: kills, best: records.kills, label: 'Mejor Kills' },
-      average: { current: currentAvg, best: records.average, label: 'Mejor Promedio' },
-    };
+    const results = [
+      { key: 'score', current: score, best: records.score, label: 'Score', isNew: isNewScore },
+      { key: 'kills', current: kills, best: records.kills, label: 'Kills', isNew: isNewKills },
+      { key: 'average', current: currentAvg, best: records.average, label: 'Promedio', isNew: isNewAvg },
+      { key: 'time', current: time, best: records.time, label: 'Tiempo (s)', isNew: isNewTime },
+    ];
 
-    if (score > records.score) { records.score = score; newRecord = true; }
-    if (kills > records.kills) { records.kills = kills; newRecord = true; }
-    if (currentAvg > records.average) { records.average = currentAvg; newRecord = true; }
+    // Update records in storage if they are better
+    if (isNewScore) records.score = score;
+    if (isNewKills) records.kills = kills;
+    if (isNewAvg) records.average = currentAvg;
+    if (isNewTime) records.time = time;
 
-    Storage.save(records);
+    Storage.save(selectedDifficulty, records);
 
-    $('game-over-title').innerText = newRecord ? '🏆 ¡NUEVO RÉCORD! 🏆' : 'MISIÓN FALLIDA';
-    $('game-over-title').style.color = newRecord ? '#f1c40f' : '#ff3366';
+    $('game-over-title').innerText = anyNewRecord ? '🏆 ¡NUEVO RÉCORD! 🏆' : 'MISIÓN FALLIDA';
+    $('game-over-title').style.color = anyNewRecord ? '#f1c40f' : '#ff3366';
     $('final-stats').innerText = `Dificultad: ${selectedDifficulty.toUpperCase()} | Sobreviviste ${time}s`;
 
     const body = $('records-body');
     body.innerHTML = '';
-    for (const key in results) {
+    results.forEach(res => {
       const row = document.createElement('tr');
-      const isNew = results[key].current >= results[key].best && results[key].current > 0;
-      row.innerHTML = `<td>${results[key].label}</td><td>${results[key].current}</td><td class="${isNew ? 'highlight-record' : ''}">${results[key].best}</td>`;
+      // If it's a new record, the "best" column should show the new value too per user request
+      const displayBest = res.isNew ? res.current : res.best;
+      row.innerHTML = `<td>${res.label}</td><td>${res.current}</td><td class="${res.isNew ? 'highlight-record' : ''}">${displayBest}</td>`;
       body.appendChild(row);
-    }
+    });
   }
 
   window.retryGame = function() {
