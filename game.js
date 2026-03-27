@@ -172,7 +172,7 @@
     angle: -Math.PI / 2,
     powers: { auto: 0, manual: 0, speed: 0, shield: 0 },
     skin: { type: 'classic', img: null },
-    debuffs: { slow: 0, disable: 0 }
+    debuffs: { slow: 0, disable: 0, noscore: 0, powerlock: 0 }
   };
 
   const SKINS = {
@@ -497,15 +497,23 @@
 
     // Manual cannon
     if ((keys[' '] || isFiring) && player.powers.manual > 0) {
-      player.powers.manual--;
-      if (frame % 8 === 0) { shoot(16, '#e67e22', 'manual'); SFX.shootManual(); }
+      if (player.debuffs.powerlock > 0) {
+        // Restricted
+      } else {
+        player.powers.manual--;
+        if (frame % 8 === 0) { shoot(16, '#e67e22', 'manual'); SFX.shootManual(); }
+      }
     }
     // Auto laser
     if (player.powers.auto > 0) {
-      player.autoShootDelay++;
-      if (player.autoShootDelay > 6) {
-        shoot(14, '#f7ca18', 'auto'); SFX.shootAuto();
-        player.autoShootDelay = 0;
+      if (player.debuffs.powerlock > 0) {
+        // Power is active but locked (no firing)
+      } else {
+        player.autoShootDelay++;
+        if (player.autoShootDelay > 6) {
+          shoot(14, '#f7ca18', 'auto'); SFX.shootAuto();
+          player.autoShootDelay = 0;
+        }
       }
     }
   }
@@ -677,9 +685,15 @@
                 shakeAmt = 15; damageFlash = 0.5;
                 SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
               } else {
-                const type = Math.random() > 0.5 ? 'slow' : 'disable';
-                player.debuffs[type] = 180;
-                showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
+                const roll = Math.random();
+                let type, msg;
+                if (roll < 0.25) { type = 'slow'; msg = '⚠ NAVE LENTA'; }
+                else if (roll < 0.5) { type = 'disable'; msg = '⚠ SISTEMAS BLOQUEADOS'; }
+                else if (roll < 0.75) { type = 'noscore'; msg = '⚠ FALLO DE DATOS (NO SCORE)'; }
+                else { type = 'powerlock'; msg = '⚠ BLOQUEO DE PODERES'; }
+                
+                player.debuffs[type] = 240; // 4 seconds
+                showAnnouncement(msg);
                 SFX.hit();
               }
             }
@@ -740,6 +754,7 @@
   }
 
   function addScore(pts) {
+    if (player.debuffs.noscore > 0) return;
     score += pts;
     scoreMilestone += pts;
   }
@@ -769,10 +784,25 @@
   }
 
   function updateCollectibles() {
+    const magnetRadius = 250;
+    const magnetForce = 4.5;
+
     for (let i = powerUps.length - 1; i >= 0; i--) {
       const p = powerUps[i];
       p.time--;
-      if (hypot(player.x - p.x, player.y - p.y) < player.size + 15) {
+
+      // Magnet effect
+      const dx = player.x - p.x;
+      const dy = player.y - p.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < magnetRadius) {
+        p.x += (dx / dist) * magnetForce;
+        p.y += (dy / dist) * magnetForce;
+        // Animation trail for magnet
+        if (frame % 3 === 0) createParticles(p.x, p.y, p.color, 1);
+      }
+
+      if (dist < player.size + 15) {
         player.powers[p.type] += POWER_DURATION;
         createParticles(p.x, p.y, p.color, 30);
         SFX.powerup();
@@ -785,7 +815,18 @@
     for (let i = hearts.length - 1; i >= 0; i--) {
       const h = hearts[i];
       h.time--;
-      if (hypot(player.x - h.x, player.y - h.y) < player.size + 15) {
+
+      // Magnet effect
+      const dx = player.x - h.x;
+      const dy = player.y - h.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < magnetRadius) {
+        h.x += (dx / dist) * magnetForce;
+        h.y += (dy / dist) * magnetForce;
+        if (frame % 3 === 0) createParticles(h.x, h.y, '#ff007f', 1);
+      }
+
+      if (dist < player.size + 15) {
         if (!isPractice) player.vida++;
         createParticles(h.x, h.y, '#ff007f', 40);
         createFloatingText(h.x, h.y, "❤ +1 VIDA", "#ff007f");
@@ -945,8 +986,21 @@
       targetCtx.stroke();
     }
     
-    // Debuff visual
-    if (pObj.debuffs.slow > 0 || pObj.debuffs.disable > 0) {
+    // Debuff visual icons
+    const debuffsActive = [];
+    if (pObj.debuffs.slow > 0) debuffsActive.push('🐢');
+    if (pObj.debuffs.disable > 0) debuffsActive.push('🚫');
+    if (pObj.debuffs.noscore > 0) debuffsActive.push('📉');
+    if (pObj.debuffs.powerlock > 0) debuffsActive.push('🔒');
+
+    if (debuffsActive.length > 0) {
+      targetCtx.save();
+      targetCtx.rotate(-finalAngle); // Keep emojis horizontal
+      targetCtx.font = '16px serif';
+      targetCtx.textAlign = 'center';
+      targetCtx.fillText(debuffsActive.join(' '), 0, -pObj.size - 25);
+      targetCtx.restore();
+      
       targetCtx.beginPath();
       targetCtx.arc(0, 0, pObj.size + 10, 0, Math.PI * 2);
       targetCtx.strokeStyle = 'rgba(163, 73, 164, 0.6)';
@@ -961,44 +1015,59 @@
   /* =========================================================
      DRAWING — ENEMY SHAPES
      ========================================================= */
-  function drawEnemyShape(type, s) {
+  function drawEnemyShape(type, s, color) {
     ctx.beginPath();
     switch (type) {
       case 'circle':
         ctx.arc(0, 0, s, 0, Math.PI * 2);
+        // Add tech lines
+        ctx.moveTo(-s, 0); ctx.lineTo(s, 0);
+        ctx.moveTo(0, -s); ctx.lineTo(0, s);
         break;
       case 'triangle':
-        ctx.moveTo(0, -s); ctx.lineTo(s, s); ctx.lineTo(-s, s); ctx.closePath();
+        ctx.moveTo(0, -s * 1.2); ctx.lineTo(s, s); ctx.lineTo(-s, s); ctx.closePath();
+        // Thruster effect
+        ctx.moveTo(-s / 2, s); ctx.lineTo(0, s + s / 2); ctx.lineTo(s / 2, s);
         break;
       case 'square':
         ctx.rect(-s, -s, s * 2, s * 2);
+        ctx.rect(-s / 2, -s / 2, s, s); // Double square detail
         break;
       case 'pentagon':
         for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
         ctx.closePath();
+        ctx.moveTo(0, 0); ctx.lineTo(Math.cos(-Math.PI / 2) * s, Math.sin(-Math.PI / 2) * s);
         break;
       case 'hexagon':
         for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
         ctx.closePath();
+        ctx.arc(0, 0, s * 0.5, 0, Math.PI * 2);
         break;
       case 'star':
         for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 - Math.PI / 2; const r = i % 2 === 0 ? s : s / 2; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
         ctx.closePath();
         break;
       case 'diamond':
-        ctx.moveTo(0, -s * 1.2); ctx.lineTo(s, 0); ctx.lineTo(0, s * 1.2); ctx.lineTo(-s, 0); ctx.closePath();
+        ctx.moveTo(0, -s * 1.5); ctx.lineTo(s, 0); ctx.lineTo(0, s * 1.5); ctx.lineTo(-s, 0); ctx.closePath();
+        ctx.moveTo(-s * 0.5, 0); ctx.lineTo(s * 0.5, 0);
         break;
       case 'cross':
         ctx.rect(-s / 4, -s, s / 2, s * 2); ctx.rect(-s, -s / 4, s * 2, s / 2);
+        ctx.arc(0, 0, s / 3, 0, Math.PI * 2);
         break;
       case 'octagon':
         for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
         ctx.closePath();
+        ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.6, 0, Math.PI * 2);
         break;
       case 'ufo':
         ctx.ellipse(0, 0, s, s / 2, 0, 0, Math.PI * 2);
         ctx.moveTo(-s / 2, -s / 4);
         ctx.arc(0, -s / 4, s / 2, Math.PI, 0);
+        // Antennas
+        ctx.moveTo(-s / 4, -s / 2.5); ctx.lineTo(-s / 3, -s);
+        ctx.moveTo(s / 4, -s / 2.5); ctx.lineTo(s / 3, -s);
         break;
     }
   }
@@ -1137,8 +1206,10 @@
     if (player.powers.shield > 0) txt += `<span style="color:#3498db; margin-right:8px;">[Escudo ${Math.ceil(player.powers.shield / 60)}s]</span>`;
     
     // Debuffs in UI
-    if (player.debuffs.slow > 0) txt += `<span style="color:#a349a4; margin-right:8px;">[V-LENTA]</span>`;
-    if (player.debuffs.disable > 0) txt += `<span style="color:#ff3366; margin-right:8px;">[BLOQUEO]</span>`;
+    if (player.debuffs.slow > 0) txt += `<span style="color:#a349a4; margin-right:8px;">[🐢 LENTA]</span>`;
+    if (player.debuffs.disable > 0) txt += `<span style="color:#ff3366; margin-right:8px;">[🚫 BLOQUEO]</span>`;
+    if (player.debuffs.noscore > 0) txt += `<span style="color:#e74c3c; margin-right:8px;">[📉 SIN PUNTOS]</span>`;
+    if (player.debuffs.powerlock > 0) txt += `<span style="color:#9b59b6; margin-right:8px;">[🔒 PODER LOCK]</span>`;
     
     $('power').innerHTML = txt || 'Ninguno';
 
@@ -1156,17 +1227,22 @@
     }
   }
 
+  let animationId = null;
+
   /* =========================================================
      MAIN LOOP
      ========================================================= */
   function gameLoop() {
-    if (gameState !== 'PLAYING') return;
+    if (gameState !== 'PLAYING') {
+      animationId = null;
+      return;
+    }
 
     ctx.fillStyle = 'rgba(5, 5, 16, 0.45)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.save();
     
+    ctx.save();
+
     // Apply Shake
     if (shakeAmt > 0) {
       ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
@@ -1238,10 +1314,12 @@
 
     updateUI();
 
+    for (const d in player.debuffs) if (player.debuffs[d] > 0) player.debuffs[d]--;
+
     if (player.vida <= 0) {
       endGame();
     } else {
-      requestAnimationFrame(gameLoop);
+      animationId = requestAnimationFrame(gameLoop);
     }
   }
 
@@ -1279,11 +1357,13 @@
     if (gameState === 'GAMEOVER') return;
     if (state) {
       gameState = 'CHOOSING'; // Reusing Choosing state to pause loop
+      if (animationId) cancelAnimationFrame(animationId);
+      animationId = null;
       $('pause-menu').classList.add('active');
     } else {
       $('pause-menu').classList.remove('active');
       gameState = 'PLAYING';
-      requestAnimationFrame(gameLoop);
+      if (!animationId) animationId = requestAnimationFrame(gameLoop);
     }
   };
 
@@ -1324,7 +1404,7 @@
         clearInterval(interval);
         countEl.style.display = 'none';
         gameState = 'PLAYING';
-        requestAnimationFrame(gameLoop);
+        if (!animationId) animationId = requestAnimationFrame(gameLoop);
       } else {
         countEl.innerText = count;
       }
@@ -1428,7 +1508,7 @@
     player.x = WORLD.WIDTH / 2;
     player.y = WORLD.HEIGHT / 2;
     player.powers = { auto: 0, manual: 0, speed: 0, shield: 0 };
-    player.debuffs = { slow: 0, disable: 0 };
+    player.debuffs = { slow: 0, disable: 0, noscore: 0, powerlock: 0 };
     
     // Reset specific difficulty stats
     startGame(selectedDifficulty);
