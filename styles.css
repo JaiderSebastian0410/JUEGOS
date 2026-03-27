@@ -31,6 +31,7 @@ canvas { display: block; }
   -webkit-backdrop-filter: blur(8px);
   z-index: 10;
   padding: 20px;
+  overflow-y: auto; /* Allow scrolling on small screens */
 }
 
 .overlay.active { display: flex; }
@@ -242,6 +243,16 @@ canvas { display: block; }
   color: #f1c40f;
   font-weight: bold;
   animation: pulse 1s infinite alternate;
+}
+
+.history-row td {
+  font-size: 0.85rem;
+  color: #aaa;
+}
+
+.history-row:hover td {
+  color: #fff;
+  background: rgba(0, 255, 255, 0.05);
 }
 
 /* ---- Mobile Controls ---- */

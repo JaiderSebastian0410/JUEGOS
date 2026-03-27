@@ -119,25 +119,34 @@
           gamesPlayed: Number(data.gamesPlayed) || 0,
         };
       } catch {
-        console.warn('[Storage] Failed to load, returning defaults');
         return { ...this._defaults };
       }
     },
 
     save(mode, records) {
-      try {
-        localStorage.setItem(`${SAVE_KEY}_${mode}`, JSON.stringify(records));
-      } catch (err) {
-        console.warn('[Storage] Failed to save:', err.message);
-      }
+      localStorage.setItem(`${SAVE_KEY}_${mode}`, JSON.stringify(records));
     },
 
+    getHistory() {
+      try {
+        const raw = localStorage.getItem(`${SAVE_KEY}_history`);
+        return raw ? JSON.parse(raw) : [];
+      } catch { return []; }
+    },
+
+    saveHistory(entry) {
+      const history = this.getHistory();
+      history.unshift(entry);
+      if (history.length > 50) history.pop();
+      localStorage.setItem(`${SAVE_KEY}_history`, JSON.stringify(history));
+    },
+
+    clearHistory() { localStorage.removeItem(`${SAVE_KEY}_history`); },
+
     reset() {
-      try { 
-        Object.keys(localStorage).forEach(key => {
-          if (key.startsWith(SAVE_KEY)) localStorage.removeItem(key);
-        });
-      } catch { /* noop */ }
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith(SAVE_KEY)) localStorage.removeItem(key);
+      });
     },
   };
 
@@ -685,15 +694,11 @@
                 shakeAmt = 15; damageFlash = 0.5;
                 SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
               } else {
+                // Enemy projectile hits: just standard slow/disable
                 const roll = Math.random();
-                let type, msg;
-                if (roll < 0.25) { type = 'slow'; msg = '⚠ NAVE LENTA'; }
-                else if (roll < 0.5) { type = 'disable'; msg = '⚠ SISTEMAS BLOQUEADOS'; }
-                else if (roll < 0.75) { type = 'noscore'; msg = '⚠ FALLO DE DATOS (NO SCORE)'; }
-                else { type = 'powerlock'; msg = '⚠ BLOQUEO DE PODERES'; }
-                
-                player.debuffs[type] = 240; // 4 seconds
-                showAnnouncement(msg);
+                const type = roll < 0.5 ? 'slow' : 'disable';
+                player.debuffs[type] = 180;
+                showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
                 SFX.hit();
               }
             }
@@ -759,9 +764,6 @@
     scoreMilestone += pts;
   }
 
-  /* =========================================================
-     COLLECTIBLES
-     ========================================================= */
   function spawnCollectibles() {
     if (frame % 420 === 0) {
       const p = POWER_TYPES[Math.floor(Math.random() * POWER_TYPES.length)];
@@ -771,8 +773,23 @@
         type: p.type, color: p.color, time: 600,
       });
     }
-    
-    // Heart spawn probability reduced in Hardcore
+
+    // Debuff "Trampas" en el mapa (Red Icons)
+    let trapChance = 1200; 
+    if (selectedDifficulty === 'hardcore') trapChance = 400;
+    else if (selectedDifficulty === 'dificil') trapChance = 700;
+
+    if (frame % trapChance === 0) {
+      const types = ['slow', 'disable', 'noscore', 'powerlock'];
+      const t = types[Math.floor(Math.random() * types.length)];
+      powerUps.push({
+        x: random(camera.x + 50, camera.x + camera.width - 50),
+        y: random(camera.y + 50, camera.y + camera.height - 150),
+        type: t, color: '#ff3366', time: 500, isTrap: true
+      });
+    }
+
+    // Heart spawn probability
     let heartMod = (selectedDifficulty === 'hardcore') ? 4500 : 2200;
     if (frame > 0 && frame % heartMod === 0) {
       hearts.push({
@@ -791,21 +808,28 @@
       const p = powerUps[i];
       p.time--;
 
-      // Magnet effect
+      // Magnet effect (only for beneficial powers, not traps)
       const dx = player.x - p.x;
       const dy = player.y - p.y;
       const dist = Math.hypot(dx, dy);
-      if (dist < magnetRadius) {
+      if (dist < magnetRadius && !p.isTrap) {
         p.x += (dx / dist) * magnetForce;
         p.y += (dy / dist) * magnetForce;
-        // Animation trail for magnet
         if (frame % 3 === 0) createParticles(p.x, p.y, p.color, 1);
       }
 
-      if (dist < player.size + 15) {
-        player.powers[p.type] += POWER_DURATION;
-        createParticles(p.x, p.y, p.color, 30);
-        SFX.powerup();
+      if (dist < player.size + (p.isTrap ? 25 : 15)) {
+        if (p.isTrap) {
+          player.debuffs[p.type] = 300;
+          const msgs = { slow:'⚠ LENTITUD', disable:'⚠ BLOQUEO', noscore:'⚠ NO SCORE', powerlock:'⚠ PODER LOCK' };
+          showAnnouncement(msgs[p.type]);
+          createParticles(p.x, p.y, '#ff3366', 30);
+          SFX.hit();
+        } else {
+          player.powers[p.type] += POWER_DURATION;
+          createParticles(p.x, p.y, p.color, 30);
+          SFX.powerup();
+        }
         powerUps.splice(i, 1);
         continue;
       }
@@ -1016,58 +1040,65 @@
      DRAWING — ENEMY SHAPES
      ========================================================= */
   function drawEnemyShape(type, s, color) {
-    ctx.beginPath();
+    ctx.lineWidth = 2;
     switch (type) {
-      case 'circle':
-        ctx.arc(0, 0, s, 0, Math.PI * 2);
-        // Add tech lines
-        ctx.moveTo(-s, 0); ctx.lineTo(s, 0);
-        ctx.moveTo(0, -s); ctx.lineTo(0, s);
+      case 'circle': // Morg Ship: Orb with wings
+        ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(-s - 10, -10); ctx.lineTo(-s - 10, 10); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(s, 0); ctx.lineTo(s + 10, -10); ctx.lineTo(s + 10, 10); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.4, 0, Math.PI * 2); ctx.fill();
         break;
-      case 'triangle':
-        ctx.moveTo(0, -s * 1.2); ctx.lineTo(s, s); ctx.lineTo(-s, s); ctx.closePath();
-        // Thruster effect
-        ctx.moveTo(-s / 2, s); ctx.lineTo(0, s + s / 2); ctx.lineTo(s / 2, s);
+      case 'triangle': // Stinger: Sharp interceptor
+        ctx.beginPath(); ctx.moveTo(0, -s * 1.5); ctx.lineTo(s, s); ctx.lineTo(0, s * 0.5); ctx.lineTo(-s, s); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-s * 0.4, s); ctx.lineTo(0, s + 15); ctx.lineTo(s * 0.4, s); ctx.stroke();
         break;
-      case 'square':
-        ctx.rect(-s, -s, s * 2, s * 2);
-        ctx.rect(-s / 2, -s / 2, s, s); // Double square detail
+      case 'square': // Titan: Heavy tank
+        ctx.beginPath(); ctx.rect(-s, -s, s * 2, s * 1.5); ctx.stroke();
+        ctx.beginPath(); ctx.rect(-s * 0.6, s * 0.5, s * 1.2, s * 0.8); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-s, -s); ctx.lineTo(-s - 5, -s - 5); ctx.moveTo(s, -s); ctx.lineTo(s + 5, -s - 5); ctx.stroke();
         break;
-      case 'pentagon':
+      case 'pentagon': // Vanguard: Fortress
+        ctx.beginPath();
         for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
-        ctx.closePath();
-        ctx.moveTo(0, 0); ctx.lineTo(Math.cos(-Math.PI / 2) * s, Math.sin(-Math.PI / 2) * s);
+        ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s); ctx.stroke();
         break;
-      case 'hexagon':
+      case 'hexagon': // Wasp: Swift scout
+        ctx.beginPath();
         for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
-        ctx.closePath();
-        ctx.arc(0, 0, s * 0.5, 0, Math.PI * 2);
+        ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(s, 0); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.3, 0, Math.PI * 2); ctx.fill();
         break;
-      case 'star':
-        for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 - Math.PI / 2; const r = i % 2 === 0 ? s : s / 2; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-        ctx.closePath();
+      case 'star': // Pulsar: Energy ship
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 - Math.PI / 2; const r = i % 2 === 0 ? s : s * 0.6; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+        ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.4, 0, Math.PI * 2); ctx.stroke();
         break;
-      case 'diamond':
-        ctx.moveTo(0, -s * 1.5); ctx.lineTo(s, 0); ctx.lineTo(0, s * 1.5); ctx.lineTo(-s, 0); ctx.closePath();
-        ctx.moveTo(-s * 0.5, 0); ctx.lineTo(s * 0.5, 0);
+      case 'diamond': // Razor: Speedster
+        ctx.beginPath(); ctx.moveTo(0, -s * 1.8); ctx.lineTo(s * 0.7, 0); ctx.lineTo(0, s * 1.8); ctx.lineTo(-s * 0.7, 0); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-s * 0.3, 0); ctx.lineTo(s * 0.3, 0); ctx.stroke();
         break;
-      case 'cross':
-        ctx.rect(-s / 4, -s, s / 2, s * 2); ctx.rect(-s, -s / 4, s * 2, s / 2);
-        ctx.arc(0, 0, s / 3, 0, Math.PI * 2);
+      case 'cross': // Interceptor: Aggressive
+        ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.rect(-s * 0.2, -s * 1.2, s * 0.4, s * 2.4); ctx.stroke();
+        ctx.beginPath(); ctx.rect(-s * 1.2, -s * 0.2, s * 2.4, s * 0.4); ctx.stroke();
         break;
-      case 'octagon':
+      case 'octagon': // Goliath: Dreadnought
+        ctx.beginPath();
         for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
-        ctx.closePath();
-        ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s * 0.6, 0, Math.PI * 2);
+        ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.rect(-s * 0.5, -s * 0.5, s, s); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.2, 0, Math.PI * 2); ctx.fill();
         break;
-      case 'ufo':
-        ctx.ellipse(0, 0, s, s / 2, 0, 0, Math.PI * 2);
-        ctx.moveTo(-s / 2, -s / 4);
-        ctx.arc(0, -s / 4, s / 2, Math.PI, 0);
-        // Antennas
-        ctx.moveTo(-s / 4, -s / 2.5); ctx.lineTo(-s / 3, -s);
-        ctx.moveTo(s / 4, -s / 2.5); ctx.lineTo(s / 3, -s);
+      case 'ufo': // Overlord: Command Ship
+        ctx.beginPath(); ctx.ellipse(0, 0, s, s * 0.6, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, -s * 0.3, s * 0.55, Math.PI, 0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-s * 0.5, 0); ctx.lineTo(s * 0.5, 0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-s * 0.3, -s * 0.6); ctx.lineTo(-s * 0.4, -s * 1.1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(s * 0.3, -s * 0.6); ctx.lineTo(s * 0.4, -s * 1.1); ctx.stroke();
         break;
     }
   }
@@ -1387,15 +1418,32 @@
     $('start-menu').classList.add('active');
   };
 
-  function startCountdown() {
+  function startCountdown(seconds = 3) {
+    // Reset core stats here to clear screen immediately on retry
+    score = 0; scoreMilestone = 0;
+    kills = 0; killsMilestone = 0;
+    time = 0; frame = 0;
+    ultraEnergy = 0;
+    bullets = []; enemies = []; powerUps = []; hearts = [];
+    player.powers = { auto: 0, manual: 0, speed: 0, shield: 0 };
+    player.debuffs = { slow: 0, disable: 0, noscore: 0, powerlock: 0 };
+    player.x = WORLD.WIDTH / 2;
+    player.y = WORLD.HEIGHT / 2;
+
     $('start-menu').classList.remove('active');
     $('settings-menu').classList.remove('active');
     $('pause-menu').classList.remove('active');
     $('tutorial-menu-overlay').classList.remove('active');
+    $('game-over-menu').classList.remove('active');
+    
     $('pause-btn').style.display = 'block';
+    
+    // Show End Practice button only in practice mode
+    $('end-practice-btn').style.display = isPractice ? 'block' : 'none';
+
     const countEl = $('countdown');
     countEl.style.display = 'block';
-    let count = 3;
+    let count = seconds;
     countEl.innerText = count;
 
     const interval = setInterval(() => {
@@ -1481,6 +1529,13 @@
     if (isNewTime) records.time = time;
 
     Storage.save(selectedDifficulty, records);
+    
+    // Save to History
+    Storage.saveHistory({
+      date: new Date().toLocaleTimeString(),
+      mode: selectedDifficulty.toUpperCase(),
+      score, kills, time
+    });
 
     $('game-over-title').innerText = anyNewRecord ? '🏆 ¡NUEVO RÉCORD! 🏆' : 'MISIÓN FALLIDA';
     $('game-over-title').style.color = anyNewRecord ? '#f1c40f' : '#ff3366';
@@ -1497,22 +1552,42 @@
     });
   }
 
+  let isRetryPending = false;
   window.retryGame = function() {
-    // Reset core stats but keep difficulty and skin
-    score = 0; scoreMilestone = 0;
-    kills = 0; killsMilestone = 0;
-    time = 0; frame = 0;
-    ultraEnergy = 0;
-    bullets = []; enemies = []; powerUps = []; hearts = [];
+    if (isRetryPending) return;
+    isRetryPending = true;
     
-    player.x = WORLD.WIDTH / 2;
-    player.y = WORLD.HEIGHT / 2;
-    player.powers = { auto: 0, manual: 0, speed: 0, shield: 0 };
-    player.debuffs = { slow: 0, disable: 0, noscore: 0, powerlock: 0 };
+    // Add logic to block menus
+    $('game-over-menu').classList.remove('active');
     
-    // Reset specific difficulty stats
-    startGame(selectedDifficulty);
+    startCountdown(5); // 5 seconds as requested
+    
+    setTimeout(() => { isRetryPending = false; }, 6000);
   };
+
+  window.endPractice = function() {
+    if (!isPractice) return;
+    player.vida = 0; // Trigger endGame through loop
+  };
+
+  /* =========================================================
+     HISTORY UI
+     ========================================================= */
+  window.openHistory = function() {
+    const body = $('history-body');
+    body.innerHTML = '';
+    const history = Storage.getHistory();
+    history.forEach(h => {
+      const row = document.createElement('tr');
+      row.className = 'history-row';
+      row.innerHTML = `<td>${h.date}</td><td>${h.mode}</td><td>${h.score}</td><td>${h.kills}</td><td>${h.time}s</td>`;
+      body.appendChild(row);
+    });
+    $('history-menu').classList.add('active');
+  };
+
+  window.closeHistory = function() { $('history-menu').classList.remove('active'); };
+  window.clearHistory = function() { Storage.clearHistory(); window.openHistory(); };
 
   /* =========================================================
      PWA INSTALL PROMPT

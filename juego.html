@@ -107,7 +107,31 @@
       </label>
     </div>
     <div class="btn-group">
+      <button class="btn secondary" onclick="openHistory()">📜 Historial</button>
       <button class="btn" onclick="closeSettings()">Guardar</button>
+    </div>
+  </div>
+
+  <!-- History Menu -->
+  <div id="history-menu" class="overlay">
+    <h1 style="color: #00ffff;">📜 HISTORIAL DE MISIONES</h1>
+    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; width: 100%; max-width: 600px; max-height: 60vh; overflow-y: auto; margin-bottom: 20px;">
+      <table class="records-table" style="max-width: none;">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Modo</th>
+            <th>Score</th>
+            <th>Kills</th>
+            <th>Tiempo</th>
+          </tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+    <div class="btn-group">
+      <button class="btn secondary" onclick="clearHistory()">Borrar Historial</button>
+      <button class="btn" onclick="closeHistory()">Cerrar</button>
     </div>
   </div>
 
@@ -126,16 +150,14 @@
         <ul>
           <li><strong>Símbolos Geométricos:</strong>
             <ul>
-              <li><strong>Auto Láser (|||):</strong> Tres líneas amarillas. Disparo automático.</li>
-              <li><strong>Cañón Manual (🎯):</strong> Mira naranja. Disparo manual potente.</li>
-              <li><strong>Hyper Velocidad (^^):</strong> Doble flecha verde. Más agilidad.</li>
-              <li><strong>Escudo Prisma (⬢):</strong> Hexágono azul. Invulnerabilidad total.</li>
+              <li><strong>Auto Láser (|||):</strong> Tres líneas amarillas. Disparo automático veloz.</li>
+              <li><strong>Cañón Manual (🎯):</strong> Mira naranja. Disparo manual de alto impacto.</li>
+              <li><strong>Hyper Velocidad (^^):</strong> Doble flecha verde. Agilidad y evasión aumentada.</li>
+              <li><strong>Escudo Prisma (⬢):</strong> Hexágono azul. Invulnerabilidad total y destruye enemigos al contacto.</li>
+              <li><strong>🧲 EFECTO IMÁN:</strong> Tu nave ahora tiene un núcleo magnético. Los poderes y corazones cercanos serán atraídos hacia ti automáticamente.</li>
             </ul>
           </li>
-          <li><strong>⚡ Flash Nova (Ultra):</strong> <span style="color:#ff007f;">¿CÓMO USARLO?</span> Se carga destrozando a 100 enemigos. Una vez lista (la barra parpadeará), pulsa <strong>Q</strong>, <strong>Shift</strong> o el botón táctil ⚡ en móvil. Creará un flash abrasador que calcinará a <strong>TODOS</strong> los enemigos en pantalla instantáneamente. Recibirás tu puntuación base multiplicada x2.0 por cada muerte y un Escudo Prisma de emergencia por 3 segundos para que no mueras apenas reaparezcan los siguientes monstruos.</li>
-          <li><strong>Acumulativos:</strong> Recoger el mismo poder varias veces <strong>suma</strong> su duración restante.</li>
-          <li><strong>Cañón Manual:</strong> Solo consume su "munición" cuando mantienes <strong>Espacio</strong> o el botón 🔥.</li>
-          <li><strong>Escudo Prisma:</strong> Además de protegerte, chocar contra enemigos los destruye y cuenta como Kill.</li>
+          <li><strong>⚡ Flash Nova (Ultra):</strong> Se carga al eliminar 100 enemigos. Pulsa <strong>Q</strong>, <strong>Shift</strong> o el botón ⚡. Desintegra a todos los enemigos en pantalla con un multiplicador x2.0 en puntos.</li>
         </ul>
       </div>
 
@@ -169,10 +191,16 @@
       <div id="tab-3" class="tab-content">
         <h2>Reglas de Misión</h2>
         <ul>
-          <li><strong>Módulos de Vida:</strong> Cada <strong>70 enemigos derrotados</strong>, tu nave recibe un módulo de vida extra.</li>
-          <li><strong>Bonus Premium:</strong> Al alcanzar intervalos de <strong>1600 puntos</strong>, detendrás el tiempo y podrás elegir una Mejora Premium de larga duración (25s) para dominar el tablero.</li>
-          <li><strong>Hechizos Enemigos:</strong> Algunos enemigos disparan hechizos morados. Si te impactan, puedes sufrir <strong>Lentitud</strong> (tu nave pesa el doble) o <strong>Bloqueo de Poder</strong> (no podrás disparar rápido).</li>
-          <li><strong>Vidas Extra Escasas:</strong> Los corazones aparecen raramente y desaparecen en pocos segundos. ¡Aprovecha cuando los veas!</li>
+          <li><strong>Módulos de Vida:</strong> Cada <strong>70 enemigos derrotados</strong>, recibes una vida extra.</li>
+          <li><strong>Super-Debilidades (PELIGRO):</strong> Cuidado con los iconos rojos en el mapa:
+            <ul>
+              <li>🐢 <strong>Lentitud:</strong> La nave se vuelve pesada y difícil de maniobrar.</li>
+              <li>🚫 <strong>Sistemas:</strong> Bloquea todo disparo y uso de Ultra.</li>
+              <li>📉 <strong>Fallo:</strong> Los sensores se averían y no sumas puntos ni kills.</li>
+              <li>🔒 <strong>Bloqueo:</strong> Tus poderes activos se detienen temporalmente.</li>
+            </ul>
+          </li>
+          <li><strong>Bonus Premium:</strong> A los <strong>1600 puntos</strong>, el tiempo se detiene para que elijas una mejora legendaria de 25 segundos.</li>
         </ul>
       </div>
 
@@ -217,6 +245,7 @@
         <input type="checkbox" id="pause-sound-toggle" checked style="width: 20px; height: 20px;" onchange="toggleSoundFromPause(this)">
       </div>
       
+      <button id="end-practice-btn" class="btn secondary" style="display:none; border-color: #2ecc71; color: #2ecc71;" onclick="endPractice()">Finalizar Partida</button>
       <button class="btn secondary" style="border-color: #ff3366; color: #ff3366;" onclick="exitGame()">Salir al Menú</button>
     </div>
   </div>
