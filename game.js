@@ -1046,87 +1046,65 @@
 
     const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, s);
     grad.addColorStop(0, color);
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.2)');
 
     switch (type) {
-      case 'circle': // Morg: Orb Interceptor
-        // Main Body
+      case 'circle': // Morg: Orb Cruiser
         ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2);
         ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
-        // Cockpit
-        ctx.beginPath(); ctx.arc(0, -s*0.3, s*0.4, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fill(); ctx.stroke();
-        // Thrusters
-        ctx.beginPath(); ctx.rect(-s*1.2, -s*0.2, s*0.4, s*0.4); 
-        ctx.rect(s*0.8, -s*0.2, s*0.4, s*0.4);
-        ctx.fillStyle = color; ctx.fill();
+        // Tech wings
+        ctx.beginPath();
+        ctx.moveTo(-s, 0); ctx.lineTo(-s-12, -8); ctx.lineTo(-s-12, 8); ctx.closePath();
+        ctx.moveTo(s, 0); ctx.lineTo(s+12, -8); ctx.lineTo(s+12, 8); ctx.closePath();
+        ctx.fillStyle = color; ctx.fill(); ctx.stroke();
+        // Inner detail
+        ctx.beginPath(); ctx.arc(0, 0, s*0.5, 0, Math.PI*2); ctx.stroke();
         break;
         
-      case 'triangle': // Stinger: Sharp Phantom-like
+      case 'triangle': // Stinger: Advanced Interceptor
         ctx.beginPath();
         ctx.moveTo(0, -s * 1.8);
         ctx.lineTo(s, s); ctx.lineTo(0, s * 0.4); ctx.lineTo(-s, s);
         ctx.closePath();
         ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
-        // Engine Glow
-        ctx.beginPath(); ctx.moveTo(-s*0.4, s); ctx.lineTo(0, s+15); ctx.lineTo(s*0.4, s);
-        ctx.strokeStyle = '#fff'; ctx.stroke();
-        break;
-
-      case 'square': // Titan: Heavy Dreadnought
-        ctx.beginPath(); ctx.rect(-s, -s, s * 2, s * 1.5);
-        ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
-        // Armor Plates
-        ctx.beginPath(); ctx.rect(-s*1.1, -s*1.1, s*0.3, s*1.7);
-        ctx.rect(s*0.8, -s*1.1, s*0.3, s*1.7);
-        ctx.stroke();
-        // Energy Core
-        ctx.beginPath(); ctx.arc(0, 0, s*0.4, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff'; ctx.fill();
-        break;
-
-      case 'pentagon': // Vanguard: Shield Ship
+        // Winglets
         ctx.beginPath();
-        for (let i = 0; i < 5; i++) { 
-           const a = (i / 5) * Math.PI * 2 - Math.PI / 2; 
-           ctx.lineTo(Math.cos(a) * s * 1.2, Math.sin(a) * s * 1.2); 
-        }
-        ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
-        // Inner Ring
-        ctx.beginPath(); ctx.arc(0, 0, s*0.6, 0, Math.PI*2); ctx.stroke();
+        ctx.moveTo(-s, s); ctx.lineTo(-s-10, s+5); ctx.lineTo(-s+5, s-5); ctx.stroke();
+        ctx.moveTo(s, s); ctx.lineTo(s+10, s+5); ctx.lineTo(s-5, s-5); ctx.stroke();
         break;
 
-      case 'hexagon': // Wasp: Rapid Scout
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) { 
-           const a = (i / 6) * Math.PI * 2 - Math.PI / 2; 
-           ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); 
-        }
-        ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
-        // Wings
-        ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(-s-15, 10); ctx.lineTo(-s, 20);
-        ctx.moveTo(s, 0); ctx.lineTo(s+15, 10); ctx.lineTo(s, 20);
-        ctx.stroke();
-        break;
-
-      case 'ufo': // Overlord: Mothership
-        ctx.beginPath(); ctx.ellipse(0, 0, s * 1.5, s * 0.7, 0, 0, Math.PI * 2);
+      case 'square': // Titan: Armored Behemoth
+        ctx.beginPath(); ctx.rect(-s, -s, s * 2, s * 1.6);
         ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
-        // Dome
-        ctx.beginPath(); ctx.arc(0, -s*0.2, s*0.8, Math.PI, 0);
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.3)'; ctx.fill(); ctx.stroke();
-        // Lights
-        for(let i=-1; i<=1; i++) {
-           ctx.beginPath(); ctx.arc(i*s*0.6, s*0.2, s*0.15, 0, Math.PI*2);
-           ctx.fillStyle = '#fff'; ctx.fill();
+        // Heavy plating
+        for(let i=-1; i<=1; i+=2) {
+           ctx.beginPath(); ctx.rect(i*s*0.7 - s*0.15, -s*1.2, s*0.3, s*2.4);
+           ctx.stroke();
+        }
+        break;
+
+      case 'ufo': // Overlord: Elite Command Ship
+        ctx.beginPath(); ctx.ellipse(0, 0, s * 1.6, s * 0.8, 0, 0, Math.PI * 2);
+        ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        // Command dome
+        ctx.beginPath(); ctx.arc(0, -s*0.3, s*0.7, Math.PI, 0);
+        ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fill(); ctx.stroke();
+        // Engine vents
+        for(let i=-2; i<=2; i++) {
+           ctx.beginPath(); ctx.rect(i*s*0.4 - 2, s*0.5, 4, 6);
+           ctx.fillStyle = color; ctx.fill();
         }
         break;
         
-      default: // Generic High-Tech Ship for other types
+      default: // High-tech combat drone for everything else
         ctx.beginPath();
-        ctx.moveTo(0, -s * 1.5); ctx.lineTo(s, 0); ctx.lineTo(0, s * 1.5); ctx.lineTo(-s, 0);
-        ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.rect(-s*0.2, -s*1.2, s*0.4, s*2.4); ctx.stroke();
+        ctx.moveTo(0, -s * 1.4);
+        ctx.lineTo(s * 0.8, 0);
+        ctx.lineTo(0, s * 1.4);
+        ctx.lineTo(-s * 0.8, 0);
+        ctx.closePath();
+        ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-s*0.4, 0); ctx.lineTo(s*0.4, 0); ctx.stroke();
         break;
     }
   }
@@ -1160,16 +1138,16 @@
       ctx.lineWidth = 1.5;
       ctx.rotate(frame * 0.04 * (e.speed > 2.0 ? 2 : 1));
 
-      // Draw outer shape
-      drawEnemyShape(e.type, e.size);
+      // Draw outer shape (Passing the color now to fix crash!)
+      drawEnemyShape(e.type, e.size, e.color);
       ctx.fill();
       ctx.stroke();
 
       // Draw inner glowing core
       if (!isMobile) {
         ctx.beginPath();
-        drawEnemyShape(e.type, e.size * 0.4);
-        ctx.fillStyle = e.color;
+        drawEnemyShape(e.type, e.size * 0.4, '#ffffff');
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.shadowBlur = 20;
         ctx.fill();
       }
@@ -1402,13 +1380,13 @@
         player.vida = 1; 
         currentMilestoneTarget = 4200; 
         currentUnlockInterval = 1200; 
-        unlockedEnemies = 3; // Harder from start
+        unlockedEnemies = 3; 
         break;
       case 'progresivo': diffMultiplier = 1.0; spawnRate = 120; break;
     }
-    startCountdown();
+    // Correcting parameter call
+    startCountdown(3); 
 
-    // Trigger initial preview draw
     setTimeout(drawPreview, 100);
   };
 
