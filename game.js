@@ -1037,68 +1037,96 @@
   }
 
   /* =========================================================
-     DRAWING — ENEMY SHAPES
+     DRAWING — DETAILED ENEMY SHIPS
      ========================================================= */
   function drawEnemyShape(type, s, color) {
     ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.lineJoin = 'round';
+
+    const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, s);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+
     switch (type) {
-      case 'circle': // Morg Ship: Orb with wings
-        ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(-s - 10, -10); ctx.lineTo(-s - 10, 10); ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(s, 0); ctx.lineTo(s + 10, -10); ctx.lineTo(s + 10, 10); ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s * 0.4, 0, Math.PI * 2); ctx.fill();
+      case 'circle': // Morg: Orb Interceptor
+        // Main Body
+        ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2);
+        ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        // Cockpit
+        ctx.beginPath(); ctx.arc(0, -s*0.3, s*0.4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fill(); ctx.stroke();
+        // Thrusters
+        ctx.beginPath(); ctx.rect(-s*1.2, -s*0.2, s*0.4, s*0.4); 
+        ctx.rect(s*0.8, -s*0.2, s*0.4, s*0.4);
+        ctx.fillStyle = color; ctx.fill();
         break;
-      case 'triangle': // Stinger: Sharp interceptor
-        ctx.beginPath(); ctx.moveTo(0, -s * 1.5); ctx.lineTo(s, s); ctx.lineTo(0, s * 0.5); ctx.lineTo(-s, s); ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s * 0.4, s); ctx.lineTo(0, s + 15); ctx.lineTo(s * 0.4, s); ctx.stroke();
-        break;
-      case 'square': // Titan: Heavy tank
-        ctx.beginPath(); ctx.rect(-s, -s, s * 2, s * 1.5); ctx.stroke();
-        ctx.beginPath(); ctx.rect(-s * 0.6, s * 0.5, s * 1.2, s * 0.8); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s, -s); ctx.lineTo(-s - 5, -s - 5); ctx.moveTo(s, -s); ctx.lineTo(s + 5, -s - 5); ctx.stroke();
-        break;
-      case 'pentagon': // Vanguard: Fortress
+        
+      case 'triangle': // Stinger: Sharp Phantom-like
         ctx.beginPath();
-        for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
-        ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s * 0.5, 0, Math.PI * 2); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s); ctx.stroke();
+        ctx.moveTo(0, -s * 1.8);
+        ctx.lineTo(s, s); ctx.lineTo(0, s * 0.4); ctx.lineTo(-s, s);
+        ctx.closePath();
+        ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        // Engine Glow
+        ctx.beginPath(); ctx.moveTo(-s*0.4, s); ctx.lineTo(0, s+15); ctx.lineTo(s*0.4, s);
+        ctx.strokeStyle = '#fff'; ctx.stroke();
         break;
-      case 'hexagon': // Wasp: Swift scout
+
+      case 'square': // Titan: Heavy Dreadnought
+        ctx.beginPath(); ctx.rect(-s, -s, s * 2, s * 1.5);
+        ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        // Armor Plates
+        ctx.beginPath(); ctx.rect(-s*1.1, -s*1.1, s*0.3, s*1.7);
+        ctx.rect(s*0.8, -s*1.1, s*0.3, s*1.7);
+        ctx.stroke();
+        // Energy Core
+        ctx.beginPath(); ctx.arc(0, 0, s*0.4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill();
+        break;
+
+      case 'pentagon': // Vanguard: Shield Ship
         ctx.beginPath();
-        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
-        ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(s, 0); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s * 0.3, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 5; i++) { 
+           const a = (i / 5) * Math.PI * 2 - Math.PI / 2; 
+           ctx.lineTo(Math.cos(a) * s * 1.2, Math.sin(a) * s * 1.2); 
+        }
+        ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        // Inner Ring
+        ctx.beginPath(); ctx.arc(0, 0, s*0.6, 0, Math.PI*2); ctx.stroke();
         break;
-      case 'star': // Pulsar: Energy ship
+
+      case 'hexagon': // Wasp: Rapid Scout
         ctx.beginPath();
-        for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 - Math.PI / 2; const r = i % 2 === 0 ? s : s * 0.6; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-        ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s * 0.4, 0, Math.PI * 2); ctx.stroke();
+        for (let i = 0; i < 6; i++) { 
+           const a = (i / 6) * Math.PI * 2 - Math.PI / 2; 
+           ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); 
+        }
+        ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        // Wings
+        ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(-s-15, 10); ctx.lineTo(-s, 20);
+        ctx.moveTo(s, 0); ctx.lineTo(s+15, 10); ctx.lineTo(s, 20);
+        ctx.stroke();
         break;
-      case 'diamond': // Razor: Speedster
-        ctx.beginPath(); ctx.moveTo(0, -s * 1.8); ctx.lineTo(s * 0.7, 0); ctx.lineTo(0, s * 1.8); ctx.lineTo(-s * 0.7, 0); ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s * 0.3, 0); ctx.lineTo(s * 0.3, 0); ctx.stroke();
+
+      case 'ufo': // Overlord: Mothership
+        ctx.beginPath(); ctx.ellipse(0, 0, s * 1.5, s * 0.7, 0, 0, Math.PI * 2);
+        ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        // Dome
+        ctx.beginPath(); ctx.arc(0, -s*0.2, s*0.8, Math.PI, 0);
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.3)'; ctx.fill(); ctx.stroke();
+        // Lights
+        for(let i=-1; i<=1; i++) {
+           ctx.beginPath(); ctx.arc(i*s*0.6, s*0.2, s*0.15, 0, Math.PI*2);
+           ctx.fillStyle = '#fff'; ctx.fill();
+        }
         break;
-      case 'cross': // Interceptor: Aggressive
-        ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.rect(-s * 0.2, -s * 1.2, s * 0.4, s * 2.4); ctx.stroke();
-        ctx.beginPath(); ctx.rect(-s * 1.2, -s * 0.2, s * 2.4, s * 0.4); ctx.stroke();
-        break;
-      case 'octagon': // Goliath: Dreadnought
+        
+      default: // Generic High-Tech Ship for other types
         ctx.beginPath();
-        for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); }
-        ctx.closePath(); ctx.stroke();
-        ctx.beginPath(); ctx.rect(-s * 0.5, -s * 0.5, s, s); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s * 0.2, 0, Math.PI * 2); ctx.fill();
-        break;
-      case 'ufo': // Overlord: Command Ship
-        ctx.beginPath(); ctx.ellipse(0, 0, s, s * 0.6, 0, 0, Math.PI * 2); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, -s * 0.3, s * 0.55, Math.PI, 0); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s * 0.5, 0); ctx.lineTo(s * 0.5, 0); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s * 0.3, -s * 0.6); ctx.lineTo(-s * 0.4, -s * 1.1); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(s * 0.3, -s * 0.6); ctx.lineTo(s * 0.4, -s * 1.1); ctx.stroke();
+        ctx.moveTo(0, -s * 1.5); ctx.lineTo(s, 0); ctx.lineTo(0, s * 1.5); ctx.lineTo(-s, 0);
+        ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.rect(-s*0.2, -s*1.2, s*0.4, s*2.4); ctx.stroke();
         break;
     }
   }
@@ -1418,8 +1446,13 @@
     $('start-menu').classList.add('active');
   };
 
+  let countdownInterval = null;
   function startCountdown(seconds = 3) {
-    // Reset core stats here to clear screen immediately on retry
+    if (animationId) cancelAnimationFrame(animationId);
+    if (countdownInterval) clearInterval(countdownInterval);
+    animationId = null;
+
+    // Reset core stats here (Clean start)
     score = 0; scoreMilestone = 0;
     kills = 0; killsMilestone = 0;
     time = 0; frame = 0;
@@ -1437,8 +1470,6 @@
     $('game-over-menu').classList.remove('active');
     
     $('pause-btn').style.display = 'block';
-    
-    // Show End Practice button only in practice mode
     $('end-practice-btn').style.display = isPractice ? 'block' : 'none';
 
     const countEl = $('countdown');
@@ -1446,10 +1477,11 @@
     let count = seconds;
     countEl.innerText = count;
 
-    const interval = setInterval(() => {
+    countdownInterval = setInterval(() => {
       count--;
       if (count <= 0) {
-        clearInterval(interval);
+        clearInterval(countdownInterval);
+        countdownInterval = null;
         countEl.style.display = 'none';
         gameState = 'PLAYING';
         if (!animationId) animationId = requestAnimationFrame(gameLoop);
@@ -1541,33 +1573,48 @@
     $('game-over-title').style.color = anyNewRecord ? '#f1c40f' : '#ff3366';
     $('final-stats').innerText = `Dificultad: ${selectedDifficulty.toUpperCase()} | Sobreviviste ${time}s`;
 
+    // Reset Retry Button UI Just in case
+    const retryBtn = $('retry-btn');
+    if (retryBtn) { retryBtn.innerText = 'Reintentar'; retryBtn.style.background = ''; }
+
     const body = $('records-body');
     body.innerHTML = '';
     results.forEach(res => {
       const row = document.createElement('tr');
-      // If it's a new record, the "best" column should show the new value too per user request
       const displayBest = res.isNew ? res.current : res.best;
       row.innerHTML = `<td>${res.label}</td><td>${res.current}</td><td class="${res.isNew ? 'highlight-record' : ''}">${displayBest}</td>`;
       body.appendChild(row);
     });
   }
 
-  let isRetryPending = false;
   window.retryGame = function() {
-    if (isRetryPending) return;
-    isRetryPending = true;
+    const retryBtn = $('retry-btn');
     
-    // Add logic to block menus
-    $('game-over-menu').classList.remove('active');
-    
-    startCountdown(5); // 5 seconds as requested
-    
-    setTimeout(() => { isRetryPending = false; }, 6000);
+    if (countdownInterval) {
+      // CANCEL LOGIC
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+      $('countdown').style.display = 'none';
+      if (retryBtn) {
+        retryBtn.innerText = 'Reintentar';
+        retryBtn.style.background = '';
+      }
+    } else {
+      // START RETRY LOGIC
+      if (retryBtn) {
+        retryBtn.innerText = 'Cancelar';
+        retryBtn.style.background = '#ff3366';
+      }
+      startCountdown(5);
+    }
   };
 
   window.endPractice = function() {
     if (!isPractice) return;
-    player.vida = 0; // Trigger endGame through loop
+    if (animationId) cancelAnimationFrame(animationId);
+    animationId = null;
+    player.vida = 0; 
+    endGame(); // Direct call to ensure it closes
   };
 
   /* =========================================================
