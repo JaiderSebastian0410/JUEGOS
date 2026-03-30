@@ -447,47 +447,101 @@
   const animatedStars = [];
 
   function initBackground() {
-    bgCtx.fillStyle = '#080812'; // Dark opaque color
+    bgCtx.fillStyle = '#05050A'; // Deep space void
     bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
 
-    // Static Opaque Nebulae
-    const colors = [
-      {r:80, g:40, b:120}, {r:40, g:80, b:120}, {r:120, g:40, b:80}
+    // 1. Dust clouds / Milky Way bands (Soft, opaque gradients)
+    const nebulas = [
+      {r: 35, g:45, b:85},   // Muted blue
+      {r: 55, g:25, b:65},   // Muted purple
+      {r: 20, g:60, b:70},   // Muted teal
+      {r: 40, g:30, b:45}    // Dark violet
     ];
-    for (let i = 0; i < 15; i++) {
-      const c = colors[Math.floor(Math.random() * colors.length)];
+    for (let i = 0; i < 40; i++) {
+      const c = nebulas[Math.floor(Math.random() * nebulas.length)];
       const x = Math.random() * WORLD.WIDTH;
       const y = Math.random() * WORLD.HEIGHT;
-      const r = Math.random() * 500 + 200;
+      const r = Math.random() * 800 + 300;
       
       const g = bgCtx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, `rgba(${c.r},${c.g},${c.b},0.2)`);
+      g.addColorStop(0, `rgba(${c.r},${c.g},${c.b},0.15)`);
+      g.addColorStop(0.5, `rgba(${c.r},${c.g},${c.b},0.05)`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       bgCtx.fillStyle = g;
       bgCtx.fillRect(x - r, y - r, r * 2, r * 2);
     }
     
-    // Static distant stars
-    bgCtx.fillStyle = 'rgba(255,255,255,0.3)';
-    for(let i=0; i<400; i++) {
-      bgCtx.fillRect(Math.random()*WORLD.WIDTH, Math.random()*WORLD.HEIGHT, Math.random()*2+1, Math.random()*2+1);
+    // 2. High-res Distant Stars (8,000 stars, zero runtime cost)
+    for(let i=0; i<8000; i++) {
+      const alpha = Math.random() * 0.4 + 0.1;
+      const size = Math.random() > 0.9 ? 2 : 1;
+      bgCtx.fillStyle = `rgba(255,255,255,${alpha})`;
+      bgCtx.fillRect(Math.random()*WORLD.WIDTH, Math.random()*WORLD.HEIGHT, size, size);
+    }
+
+    // 3. Cinematic Planets (Pre-rendered)
+    const planetColors = [
+      {c: '#556677', a: '#223344'}, {c: '#885544', a: '#442211'}, {c: '#447766', a: '#113322'}, {c: '#774466', a: '#331122'}
+    ];
+    for (let i = 0; i < 12; i++) {
+      const x = Math.random() * WORLD.WIDTH;
+      const y = Math.random() * WORLD.HEIGHT;
+      const r = Math.random() * 150 + 40;
+      const clr = planetColors[Math.floor(Math.random() * planetColors.length)];
+      
+      bgCtx.save();
+      bgCtx.translate(x, y);
+      bgCtx.rotate(Math.random() * Math.PI);
+
+      // Planet Shadow/Light
+      const pg = bgCtx.createRadialGradient(-r*0.3, -r*0.3, r*0.1, 0, 0, r);
+      pg.addColorStop(0, clr.c);
+      pg.addColorStop(0.7, clr.a);
+      pg.addColorStop(1, '#000000');
+      
+      bgCtx.beginPath();
+      bgCtx.arc(0, 0, r, 0, Math.PI * 2);
+      bgCtx.fillStyle = pg;
+      bgCtx.fill();
+
+      // Atmospheric glow
+      bgCtx.strokeStyle = `rgba(255,255,255,0.08)`;
+      bgCtx.lineWidth = 2;
+      bgCtx.stroke();
+
+      // Rings (50% probability)
+      if (Math.random() > 0.5) {
+        bgCtx.beginPath();
+        bgCtx.ellipse(0, 0, r * 2.2, r * 0.4, 0, 0, Math.PI * 2);
+        bgCtx.lineWidth = r * 0.15;
+        bgCtx.strokeStyle = `rgba(200, 200, 220, 0.15)`;
+        bgCtx.stroke();
+      }
+      bgCtx.restore();
     }
     bgReady = true;
 
-    // Animated frontend stars (efficient parallax)
-    for(let i=0; i<80; i++) {
+    // 4. Parallax Animated Stars & Comets
+    for(let i=0; i<150; i++) {
       animatedStars.push({
         x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-        size: Math.random() * 2 + 1, speed: Math.random() * 0.4 + 0.1,
-        alpha: Math.random() * 0.6 + 0.4
+        size: Math.random() * 2 + 1, speed: Math.random() * 0.6 + 0.1,
+        alpha: Math.random() * 0.8 + 0.2, type: 'star'
+      });
+    }
+    for(let i=0; i<8; i++) {
+      animatedStars.push({
+        x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
+        speed: Math.random() * 4 + 2, angle: Math.random() * 0.4 + 0.2,
+        length: Math.random() * 60 + 30, alpha: Math.random() * 0.4 + 0.1, type: 'comet'
       });
     }
   }
   initBackground();
 
   function drawAnimatedBackground() {
+    // 1. Draw huge static layer safely
     if (bgReady) {
-      // Safe viewport rendering
       const sx = Math.max(0, camera.x);
       const sy = Math.max(0, camera.y);
       const sw = Math.min(camera.width, bgCanvas.width - sx);
@@ -497,19 +551,43 @@
       }
     }
     
-    // Draw animated stars
-    ctx.fillStyle = '#ffffff';
+    // 2. Parallax Animations
     for (let i=0; i<animatedStars.length; i++) {
       const s = animatedStars[i];
-      const dx = s.x - camera.x * (1 - s.speed);
-      const dy = s.y - camera.y * (1 - s.speed);
-      let px = dx % WORLD.WIDTH; if (px < 0) px += WORLD.WIDTH;
-      let py = dy % WORLD.HEIGHT; if (py < 0) py += WORLD.HEIGHT;
-      
-      if (px > camera.x - 20 && px < camera.x + camera.width + 20 &&
-          py > camera.y - 20 && py < camera.y + camera.height + 20) {
-        ctx.globalAlpha = s.alpha * (0.6 + Math.sin(frame * 0.05 + i) * 0.4);
-        ctx.fillRect(px, py, s.size, s.size);
+      if (s.type === 'comet') {
+        s.x += Math.cos(s.angle) * s.speed;
+        s.y += Math.sin(s.angle) * s.speed;
+        if (s.x > WORLD.WIDTH + 100) { s.x = -100; s.y = Math.random() * WORLD.HEIGHT; }
+        if (s.y > WORLD.HEIGHT + 100) { s.y = -100; s.x = Math.random() * WORLD.WIDTH; }
+        
+        const cx = s.x - camera.x * 0.3;
+        const cy = s.y - camera.y * 0.3;
+        
+        if (cx > -s.length && cx < camera.width + s.length && cy > -s.length && cy < camera.height + s.length) {
+          ctx.save();
+          ctx.globalAlpha = s.alpha;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(camera.x + cx, camera.y + cy);
+          ctx.lineTo(camera.x + cx - Math.cos(s.angle) * s.length, camera.y + cy - Math.sin(s.angle) * s.length);
+          ctx.stroke();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.arc(camera.x + cx, camera.y + cy, 1.5, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+      } else {
+        const dx = s.x - camera.x * (1 - s.speed);
+        const dy = s.y - camera.y * (1 - s.speed);
+        let px = dx % WORLD.WIDTH; if (px < 0) px += WORLD.WIDTH;
+        let py = dy % WORLD.HEIGHT; if (py < 0) py += WORLD.HEIGHT;
+        
+        if (px > camera.x - 20 && px < camera.x + camera.width + 20 &&
+            py > camera.y - 20 && py < camera.y + camera.height + 20) {
+          ctx.globalAlpha = s.alpha * (0.5 + Math.sin(frame * 0.05 + i) * 0.5);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(px, py, s.size, s.size);
+        }
       }
     }
     ctx.globalAlpha = 1.0;
