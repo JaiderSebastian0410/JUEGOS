@@ -1,9 +1,9 @@
 /* =========================================================
-   Space Defender Pro — Service Worker
-   Strategy: Cache-first for static assets, network-first for navigation
+   Space Defender Pro — Service Worker v3
+   Offline-first: caches ALL assets including skins & fonts
    ========================================================= */
 
-const CACHE_VERSION = 'space-defender-v1';
+const CACHE_VERSION = 'space-defender-v3';
 const STATIC_ASSETS = [
   './',
   './juego.html',
@@ -13,11 +13,13 @@ const STATIC_ASSETS = [
   './favicon.svg',
   './icon-192.png',
   './icon-512.png',
+  './skin_classic.png',
+  './skin_phantom.png',
+  './skin_golden.png',
+  './sw.js'
 ];
 
-const FONT_CACHE = 'space-defender-fonts-v1';
-
-/* ---- Install: Pre-cache core assets ---- */
+/* ---- Install: Pre-cache ALL core assets ---- */
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
@@ -26,48 +28,45 @@ self.addEventListener('install', (event) => {
   );
 });
 
-/* ---- Activate: Clean old caches ---- */
+/* ---- Activate: Clean old caches & claim clients ---- */
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== CACHE_VERSION && key !== FONT_CACHE)
+          .filter((key) => key !== CACHE_VERSION)
           .map((key) => caches.delete(key))
       )
     ).then(() => self.clients.claim())
   );
 });
 
-/* ---- Fetch: Cache-first with network fallback ---- */
+/* ---- Fetch: Cache-first with network update ---- */
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-
-  // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Google Fonts — cache separately with longer lifetime
+  // Google Fonts: stale-while-revalidate
   if (request.url.includes('fonts.googleapis.com') || request.url.includes('fonts.gstatic.com')) {
     event.respondWith(
-      caches.open(FONT_CACHE).then((cache) =>
+      caches.open(CACHE_VERSION).then((cache) =>
         cache.match(request).then((cached) => {
-          if (cached) return cached;
-          return fetch(request).then((response) => {
+          const fetchPromise = fetch(request).then((response) => {
             if (response.ok) cache.put(request, response.clone());
             return response;
-          });
+          }).catch(() => cached);
+          return cached || fetchPromise;
         })
       )
     );
     return;
   }
 
-  // Static assets — cache-first
+  // All other requests: cache-first, network fallback, auto-cache new
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
-        // Cache successful same-origin responses
         if (response.ok && request.url.startsWith(self.location.origin)) {
           const clone = response.clone();
           caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone));
@@ -75,7 +74,6 @@ self.addEventListener('fetch', (event) => {
         return response;
       });
     }).catch(() => {
-      // Offline fallback for navigation
       if (request.mode === 'navigate') {
         return caches.match('./juego.html');
       }
