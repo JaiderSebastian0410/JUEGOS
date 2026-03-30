@@ -262,7 +262,7 @@
   const KEY_HOLD_THRESHOLD = 12;
   let joystickOrigin = null;
   let joystickCurrent = null;
-  let isMobile = false;
+  let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   let isFiring = false;
   let mouseX = 0, mouseY = 0;
   let isMouseDown = false;
@@ -533,8 +533,9 @@
       bgCtx.restore();
     }
 
-    // 3. High-res Distant Stars (10,000 tiny stars)
-    for(let i=0; i<10000; i++) {
+    // 3. High-res Distant Stars (Reduced for mobile performance)
+    const totalStars = isMobile ? 3000 : 10000;
+    for(let i=0; i<totalStars; i++) {
       const alpha = Math.random() * 0.5 + 0.1;
       const size = Math.random() > 0.95 ? 2.5 : 1;
       
@@ -662,8 +663,9 @@
       }
     }
     
-    // 2. Parallax Animations
+    // 2. Parallax Animations (Optimized for mobile)
     for (let i=0; i<animatedStars.length; i++) {
+        if (isMobile && i % 2 !== 0) continue; // Show only 50% stars on mobile for performance
       const s = animatedStars[i];
       if (s.type === 'comet') {
         s.x += Math.cos(s.angle) * s.speed;
@@ -1779,6 +1781,7 @@
 
     ctx.fillStyle = '#050510';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (isMobile) ctx.shadowBlur = 0;
     
     ctx.save();
 
@@ -1877,7 +1880,7 @@
         diffMultiplier = 2.5; 
         spawnRate = 60; 
         player.vida = 1; 
-        currentMilestoneTarget = 1600; 
+        currentMilestoneTarget = 4200; 
         currentUnlockInterval = 1200; 
         unlockedEnemies = 3; 
         break;

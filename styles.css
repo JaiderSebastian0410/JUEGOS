@@ -273,13 +273,25 @@ canvas { display: block; }
 }
 
 /* ---- Mobile Controls ---- */
+/* ---- Mobile Controls (Left/Only Mobile) ---- */
 #mobile-controls {
   position: absolute;
-  bottom: 40px; right: 20px;
-  display: flex;
+  bottom: 85px; left: 20px;
+  display: none; /* Hidden by default, let JS show it if mobile is detected */
   flex-direction: column;
   gap: 15px;
   z-index: 100;
+}
+
+@media (max-width: 1024px) {
+  #mobile-controls { display: flex; }
+  /* Performance optimizations for mobile browsers */
+  .overlay, #tutorial-menu { backdrop-filter: none; background: rgba(5, 5, 15, 0.98); }
+  * { box-shadow: none !important; text-shadow: none !important; }
+}
+
+@media (min-width: 1025px) {
+  #mobile-controls, #joystick-base, #joystick-handle { display: none !important; }
 }
 
 .touch-btn {
