@@ -436,27 +436,84 @@
   }
 
   /* =========================================================
-     BACKGROUND — Pre-rendered image (no per-frame cost)
+     PROCEDURAL OPAQUE BACKGROUND + ANIMATED STARS
      ========================================================= */
-  const bgImage = new Image();
-  bgImage.src = 'space_bg.png';
-  let bgReady = false;
-  // Pre-render full world background once image loads
   const bgCanvas = document.createElement('canvas');
   bgCanvas.width = WORLD.WIDTH;
   bgCanvas.height = WORLD.HEIGHT;
-  const bgCtx = bgCanvas.getContext('2d');
+  const bgCtx = bgCanvas.getContext('2d', { alpha: false });
+  let bgReady = false;
+  
+  const animatedStars = [];
 
-  bgImage.onload = function() {
-    // Tile the image across the world
-    const pw = bgImage.width, ph = bgImage.height;
-    for (let x = 0; x < WORLD.WIDTH; x += pw) {
-      for (let y = 0; y < WORLD.HEIGHT; y += ph) {
-        bgCtx.drawImage(bgImage, x, y, pw, ph);
-      }
+  function initBackground() {
+    bgCtx.fillStyle = '#080812'; // Dark opaque color
+    bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
+
+    // Static Opaque Nebulae
+    const colors = [
+      {r:80, g:40, b:120}, {r:40, g:80, b:120}, {r:120, g:40, b:80}
+    ];
+    for (let i = 0; i < 15; i++) {
+      const c = colors[Math.floor(Math.random() * colors.length)];
+      const x = Math.random() * WORLD.WIDTH;
+      const y = Math.random() * WORLD.HEIGHT;
+      const r = Math.random() * 500 + 200;
+      
+      const g = bgCtx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(${c.r},${c.g},${c.b},0.2)`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      bgCtx.fillStyle = g;
+      bgCtx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    
+    // Static distant stars
+    bgCtx.fillStyle = 'rgba(255,255,255,0.3)';
+    for(let i=0; i<400; i++) {
+      bgCtx.fillRect(Math.random()*WORLD.WIDTH, Math.random()*WORLD.HEIGHT, Math.random()*2+1, Math.random()*2+1);
     }
     bgReady = true;
-  };
+
+    // Animated frontend stars (efficient parallax)
+    for(let i=0; i<80; i++) {
+      animatedStars.push({
+        x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
+        size: Math.random() * 2 + 1, speed: Math.random() * 0.4 + 0.1,
+        alpha: Math.random() * 0.6 + 0.4
+      });
+    }
+  }
+  initBackground();
+
+  function drawAnimatedBackground() {
+    if (bgReady) {
+      // Safe viewport rendering
+      const sx = Math.max(0, camera.x);
+      const sy = Math.max(0, camera.y);
+      const sw = Math.min(camera.width, bgCanvas.width - sx);
+      const sh = Math.min(camera.height, bgCanvas.height - sy);
+      if (sw > 0 && sh > 0) {
+        ctx.drawImage(bgCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
+      }
+    }
+    
+    // Draw animated stars
+    ctx.fillStyle = '#ffffff';
+    for (let i=0; i<animatedStars.length; i++) {
+      const s = animatedStars[i];
+      const dx = s.x - camera.x * (1 - s.speed);
+      const dy = s.y - camera.y * (1 - s.speed);
+      let px = dx % WORLD.WIDTH; if (px < 0) px += WORLD.WIDTH;
+      let py = dy % WORLD.HEIGHT; if (py < 0) py += WORLD.HEIGHT;
+      
+      if (px > camera.x - 20 && px < camera.x + camera.width + 20 &&
+          py > camera.y - 20 && py < camera.y + camera.height + 20) {
+        ctx.globalAlpha = s.alpha * (0.6 + Math.sin(frame * 0.05 + i) * 0.4);
+        ctx.fillRect(px, py, s.size, s.size);
+      }
+    }
+    ctx.globalAlpha = 1.0;
+  }
 
   /* =========================================================
      PARTICLES
@@ -1521,11 +1578,7 @@
 
     ctx.translate(-camera.x, -camera.y);
 
-    // Background — draw only the visible viewport (massive performance gain)
-    if (bgReady) {
-      // ctx is translated by -camera.x, -camera.y, so drawing at camera.x appears at 0,0 on screen
-      ctx.drawImage(bgCanvas, camera.x, camera.y, camera.width, camera.height, camera.x, camera.y, camera.width, camera.height);
-    }
+    drawAnimatedBackground();
 
     // World border
     ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)';
