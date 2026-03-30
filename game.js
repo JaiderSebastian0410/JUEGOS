@@ -266,6 +266,7 @@
   let isFiring = false;
   let mouseX = 0, mouseY = 0;
   let isMouseDown = false;
+  let mouseActive = false; // Only true after first click
 
   window.selectSkin = function(type) {
     player.skin.type = type;
@@ -361,16 +362,18 @@
   });
   document.addEventListener('keyup', (e) => { keys[e.key] = false; keyHoldTimers[e.key] = 0; });
 
-  // Mouse aiming & click-to-fire (PC)
+  // Mouse aiming & click-to-fire (PC) — ignored until first click
   canvas.addEventListener('mousemove', (e) => {
-    if (isMobile || gameState !== 'PLAYING') return;
+    if (isMobile || gameState !== 'PLAYING' || !mouseActive) return;
     mouseX = e.clientX + camera.x;
     mouseY = e.clientY + camera.y;
-    player.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
   });
   canvas.addEventListener('mousedown', (e) => {
     if (isMobile || gameState !== 'PLAYING') return;
+    mouseActive = true;
     isMouseDown = true;
+    mouseX = e.clientX + camera.x;
+    mouseY = e.clientY + camera.y;
   });
   canvas.addEventListener('mouseup', () => { isMouseDown = false; });
 
@@ -468,13 +471,27 @@
     });
   }
 
-  // Nebulae (pre-generated positions)
+  // Nebulae — vibrant purple/blue/pink/teal like deep space reference
   const nebulae = [];
-  for (let i = 0; i < 6; i++) {
+  const nebulaColors = [
+    {hue:280, sat:70, lit:35}, // Purple
+    {hue:220, sat:80, lit:40}, // Deep blue
+    {hue:320, sat:60, lit:35}, // Pink/magenta
+    {hue:180, sat:50, lit:30}, // Teal
+    {hue:260, sat:65, lit:30}, // Violet
+    {hue:340, sat:55, lit:30}, // Rose
+    {hue:200, sat:70, lit:35}, // Cyan-blue
+    {hue:290, sat:50, lit:25}, // Dark purple
+    {hue:10, sat:50, lit:25},  // Dark red
+    {hue:240, sat:60, lit:30}, // Royal blue
+  ];
+  for (let i = 0; i < 10; i++) {
+    const c = nebulaColors[i];
     nebulae.push({
       x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-      size: Math.random() * 200 + 100,
-      hue: Math.random() * 360, alpha: Math.random() * 0.06 + 0.02
+      size: Math.random() * 350 + 150,
+      hue: c.hue, sat: c.sat, lit: c.lit,
+      alpha: Math.random() * 0.08 + 0.03
     });
   }
 
@@ -485,7 +502,8 @@
       const ny = n.y - camera.y * 0.05;
       if (nx > -n.size && nx < camera.width + n.size && ny > -n.size && ny < camera.height + n.size) {
         const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, n.size);
-        g.addColorStop(0, `hsla(${n.hue}, 60%, 40%, ${n.alpha})`);
+        g.addColorStop(0, `hsla(${n.hue}, ${n.sat}%, ${n.lit}%, ${n.alpha * 2})`);
+        g.addColorStop(0.4, `hsla(${n.hue}, ${n.sat}%, ${n.lit}%, ${n.alpha})`);
         g.addColorStop(1, 'transparent');
         ctx.fillStyle = g;
         ctx.fillRect(nx - n.size, ny - n.size, n.size * 2, n.size * 2);
@@ -661,29 +679,25 @@
     let moveY = 0;
     const moveSpeed = player.powers.speed > 0 ? PLAYER_BOOST_SPEED : PLAYER_BASE_SPEED;
 
-    // PC: Key-hold movement (brief tap = direction only, hold = move)
+    // Keyboard movement with hold threshold
     const movKeys = [
       ['w','W','ArrowUp', 0, -1], ['s','S','ArrowDown', 0, 1],
       ['a','A','ArrowLeft', -1, 0], ['d','D','ArrowRight', 1, 0]
     ];
+    let kbDirX = 0, kbDirY = 0;
     for (const [k1, k2, k3, dx, dy] of movKeys) {
       if (keys[k1] || keys[k2] || keys[k3]) {
         const hk = k1;
         keyHoldTimers[hk] = (keyHoldTimers[hk] || 0) + 1;
-        if (!isMobile && keyHoldTimers[hk] < KEY_HOLD_THRESHOLD) {
-          // Brief tap: only change direction, no displacement
-          if (!isMouseDown) {
-            const tAngle = Math.atan2(dy, dx);
-            player.angle += ((((tAngle - player.angle) + Math.PI) % (Math.PI*2)) - Math.PI) * 0.3;
-          }
-        } else {
+        kbDirX += dx; kbDirY += dy;
+        if (keyHoldTimers[hk] >= KEY_HOLD_THRESHOLD || isMobile) {
           moveX += dx * moveSpeed;
           moveY += dy * moveSpeed;
         }
       }
     }
 
-    // Virtual Joystick logic (mobile)
+    // Virtual Joystick (mobile)
     if (joystickOrigin && joystickCurrent) {
       const dx = joystickCurrent.x - joystickOrigin.x;
       const dy = joystickCurrent.y - joystickOrigin.y;
@@ -692,18 +706,25 @@
         const speedMul = Math.min(dist / 40, 1);
         moveX += (dx / dist) * moveSpeed * speedMul;
         moveY += (dy / dist) * moveSpeed * speedMul;
+        kbDirX += dx / dist; kbDirY += dy / dist;
       }
     }
 
     player.x += moveX;
     player.y += moveY;
 
-    // On mobile: angle follows movement; on PC: angle follows mouse
-    if (isMobile && Math.hypot(moveX, moveY) > 0.1) {
-      const targetAngle = Math.atan2(moveY, moveX);
-      let diff = ((targetAngle - player.angle + Math.PI) % (Math.PI * 2)) - Math.PI;
-      player.angle += diff * (Math.abs(diff) > 1.5 ? 1.0 : 0.15);
+    // Smooth rotation: mouse takes priority if active, else keyboard direction
+    let targetAngle = player.angle;
+    if (mouseActive && !isMobile) {
+      targetAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+    } else if (Math.abs(kbDirX) > 0.01 || Math.abs(kbDirY) > 0.01) {
+      targetAngle = Math.atan2(kbDirY, kbDirX);
     }
+    // Smooth lerp rotation (always fluid)
+    let angleDiff = targetAngle - player.angle;
+    angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+    if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    player.angle += angleDiff * 0.12;
 
     // Apply Slowness Debuff
     if (player.debuffs.slow > 0) {
@@ -1185,141 +1206,202 @@
      DRAWING — DETAILED ENEMY SHIPS
      ========================================================= */
   function drawEnemyShape(type, s, color) {
-    ctx.lineWidth = 2;
+    // Pixel-art spaceship style with engine flames
+    ctx.lineWidth = 1.5;
     ctx.strokeStyle = color;
-    ctx.lineJoin = 'round';
-    ctx.fillStyle = 'rgba(10,10,20,0.85)';
+    ctx.lineJoin = 'miter';
+
+    // Helper: draw pixel block
+    const px = (x, y, w, h, c) => {
+      ctx.fillStyle = c || color;
+      ctx.fillRect(x, y, w, h);
+    };
 
     switch (type) {
-      case 'circle': // Morg: Orb Drone
-        ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(-s-10, -6); ctx.lineTo(-s-10, 6); ctx.closePath();
-        ctx.moveTo(s, 0); ctx.lineTo(s+10, -6); ctx.lineTo(s+10, 6); ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s*0.4, 0, Math.PI*2);
-        ctx.fillStyle = color; ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1;
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.stroke();
+      case 'circle': { // Morg — Small scout ship
+        const u = s * 0.18;
+        // Body
+        px(-2*u, -4*u, 4*u, 6*u, color);
+        px(-3*u, -2*u, 6*u, 3*u, color);
+        px(-1*u, -5*u, 2*u, u, color);
+        // Cockpit
+        px(-u, -4*u, 2*u, 2*u, '#ffdd44');
+        px(0, -5*u, u, u, '#ffee88');
+        // Wings
+        px(-5*u, -u, 2*u, 3*u, color);
+        px(3*u, -u, 2*u, 3*u, color);
+        // Engines (blue flame)
+        px(-u, 2*u, u, 2*u, '#4488ff');
+        px(0, 2*u, u, 2*u, '#4488ff');
+        px(-u, 3*u, u, u, '#88ccff');
+        px(0, 3*u, u, u, '#88ccff');
         break;
-
-      case 'triangle': // Stinger: Fast Interceptor
-        ctx.beginPath();
-        ctx.moveTo(0, -s*1.8); ctx.lineTo(s*0.6, -s*0.3); ctx.lineTo(s*1.2, s);
-        ctx.lineTo(0, s*0.5); ctx.lineTo(-s*1.2, s); ctx.lineTo(-s*0.6, -s*0.3);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        // Exhaust
-        ctx.fillStyle = color; ctx.globalAlpha = 0.6;
-        ctx.fillRect(-3, s*0.5, 6, 8); ctx.globalAlpha = 1;
+      }
+      case 'triangle': { // Stinger — Fast interceptor
+        const u = s * 0.16;
+        px(-u, -6*u, 2*u, 8*u, color);
+        px(-3*u, -2*u, 6*u, 3*u, color);
+        px(-5*u, 0, 2*u, 2*u, color);
+        px(3*u, 0, 2*u, 2*u, color);
+        // Nose
+        px(0, -7*u, u, u, '#ffffff');
+        // Cockpit
+        px(-u, -5*u, 2*u, u, '#ffaa00');
+        // Engines
+        px(-4*u, 2*u, u, 3*u, '#00ccff');
+        px(-u, 2*u, u, 2*u, '#00ccff');
+        px(0, 2*u, u, 2*u, '#00ccff');
+        px(3*u, 2*u, u, 3*u, '#00ccff');
+        px(-4*u, 4*u, u, u, '#aaeeff');
+        px(3*u, 4*u, u, u, '#aaeeff');
         break;
-
-      case 'square': // Titan: Heavy Tank
-        ctx.beginPath(); ctx.rect(-s, -s*0.8, s*2, s*1.6); ctx.fill(); ctx.stroke();
-        // Armor plates
-        ctx.beginPath();
-        ctx.rect(-s*0.8, -s*1.2, s*0.3, s*2.4); ctx.rect(s*0.5, -s*1.2, s*0.3, s*2.4);
-        ctx.fillStyle = color; ctx.globalAlpha = 0.3; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+      }
+      case 'square': { // Titan — Heavy battleship
+        const u = s * 0.14;
+        // Wide body
+        px(-4*u, -3*u, 8*u, 6*u, color);
+        px(-2*u, -5*u, 4*u, 2*u, color);
+        px(-6*u, -u, 2*u, 4*u, color);
+        px(4*u, -u, 2*u, 4*u, color);
+        // Armor lines
+        px(-3*u, -4*u, u, 7*u, 'rgba(255,255,255,0.2)');
+        px(2*u, -4*u, u, 7*u, 'rgba(255,255,255,0.2)');
         // Turret
-        ctx.beginPath(); ctx.arc(0, 0, s*0.35, 0, Math.PI*2);
-        ctx.fillStyle = color; ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.rect(-2, -s*0.8, 4, s*0.5); ctx.fill();
+        px(-u, -4*u, 2*u, 2*u, '#ffcc00');
+        // Engines
+        px(-3*u, 3*u, 2*u, 3*u, '#ff4400');
+        px(u, 3*u, 2*u, 3*u, '#ff4400');
+        px(-3*u, 5*u, 2*u, u, '#ffaa44');
+        px(u, 5*u, 2*u, u, '#ffaa44');
         break;
-
-      case 'pentagon': // Vanguard: Escort
-        for (let i = 0; i < 5; i++) {
-          const a = (Math.PI*2/5)*i - Math.PI/2;
-          const nx = Math.cos(a)*s, ny = Math.sin(a)*s;
-          if (i===0) ctx.moveTo(nx, ny); else ctx.lineTo(nx, ny);
-        }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        // Inner core
-        ctx.beginPath(); ctx.arc(0, 0, s*0.3, 0, Math.PI*2);
-        ctx.fillStyle = color; ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1;
+      }
+      case 'pentagon': { // Vanguard
+        const u = s * 0.16;
+        px(-2*u, -5*u, 4*u, 7*u, color);
+        px(-4*u, -2*u, 8*u, 3*u, color);
+        px(-u, -6*u, 2*u, u, '#ffffff');
+        px(-u, -5*u, 2*u, u, '#88ff88');
+        // Engines
+        px(-3*u, 2*u, u, 2*u, '#44ff44');
+        px(2*u, 2*u, u, 2*u, '#44ff44');
+        px(-u, 2*u, 2*u, 3*u, '#44ff44');
+        px(0, 4*u, u, u, '#aaffaa');
         break;
-
-      case 'hexagon': // Wasp: Agile
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const a = (Math.PI*2/6)*i; const nx = Math.cos(a)*s, ny = Math.sin(a)*s;
-          if (i===0) ctx.moveTo(nx, ny); else ctx.lineTo(nx, ny);
-        }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        // Stinger wings
-        ctx.beginPath();
-        ctx.moveTo(-s*0.8, -s*0.4); ctx.lineTo(-s*1.5, -s); ctx.lineTo(-s*0.5, -s*0.2);
-        ctx.moveTo(s*0.8, -s*0.4); ctx.lineTo(s*1.5, -s); ctx.lineTo(s*0.5, -s*0.2);
-        ctx.strokeStyle = color; ctx.stroke();
+      }
+      case 'hexagon': { // Wasp — Agile fighter
+        const u = s * 0.17;
+        px(-u, -5*u, 2*u, 7*u, color);
+        px(-3*u, -3*u, 6*u, 4*u, color);
+        px(-5*u, -u, 2*u, 2*u, color);
+        px(3*u, -u, 2*u, 2*u, color);
+        px(-u, -5*u, 2*u, u, '#ffff44');
+        // Engines (yellow)
+        px(-2*u, 2*u, u, 3*u, '#ffcc00');
+        px(u, 2*u, u, 3*u, '#ffcc00');
+        px(-2*u, 4*u, u, u, '#ffee88');
+        px(u, 4*u, u, u, '#ffee88');
         break;
-
-      case 'star': // Pulsar: Energy Core
-        ctx.beginPath();
-        for (let i = 0; i < 10; i++) {
-          const a = (Math.PI*2/10)*i - Math.PI/2;
-          const r = i%2===0 ? s : s*0.5;
-          if (i===0) ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r);
-          else ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
-        }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s*0.25, 0, Math.PI*2);
-        ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.8; ctx.fill(); ctx.globalAlpha = 1;
+      }
+      case 'star': { // Pulsar — Heavy energy ship
+        const u = s * 0.15;
+        px(-2*u, -6*u, 4*u, 9*u, color);
+        px(-5*u, -2*u, 10*u, 3*u, color);
+        px(-3*u, -4*u, 6*u, 2*u, color);
+        // Core
+        px(-u, -3*u, 2*u, 2*u, '#ffffff');
+        px(0, -4*u, u, u, '#88ccff');
+        // Wings detail
+        px(-6*u, -u, u, 2*u, 'rgba(255,255,255,0.3)');
+        px(5*u, -u, u, 2*u, 'rgba(255,255,255,0.3)');
+        // Engines
+        px(-2*u, 3*u, u, 3*u, '#3388ff');
+        px(-u, 3*u, 2*u, 2*u, '#3388ff');
+        px(u, 3*u, u, 3*u, '#3388ff');
+        px(-u, 5*u, 2*u, u, '#aaccff');
         break;
-
-      case 'diamond': // Razor: Speed Blade
-        ctx.beginPath();
-        ctx.moveTo(0, -s*1.6); ctx.lineTo(s*0.5, 0); ctx.lineTo(0, s*1.6); ctx.lineTo(-s*0.5, 0);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, -s*0.8); ctx.lineTo(0, s*0.8);
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.stroke();
+      }
+      case 'diamond': { // Razor — Needle fighter
+        const u = s * 0.2;
+        px(0, -5*u, u, 8*u, color);
+        px(-u, -3*u, 3*u, 4*u, color);
+        px(-2*u, -u, 5*u, 2*u, color);
+        px(0, -6*u, u, u, '#ffffff');
+        // Engines
+        px(0, 3*u, u, 3*u, '#00ffcc');
+        px(0, 5*u, u, u, '#aaffee');
         break;
-
-      case 'cross': // Interceptor: Assault
-        ctx.beginPath();
-        ctx.rect(-s*0.35, -s, s*0.7, s*2); ctx.rect(-s, -s*0.35, s*2, s*0.7);
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s*0.3, 0, Math.PI*2);
-        ctx.fillStyle = color; ctx.globalAlpha = 0.6; ctx.fill(); ctx.globalAlpha = 1;
+      }
+      case 'cross': { // Interceptor — X-wing style
+        const u = s * 0.14;
+        px(-u, -6*u, 2*u, 9*u, color);
+        px(-5*u, -2*u, 10*u, 2*u, color);
+        // Wing tips
+        px(-6*u, -3*u, u, 4*u, color);
+        px(5*u, -3*u, u, 4*u, color);
+        // Cockpit
+        px(-u, -5*u, 2*u, 2*u, '#ff4488');
+        px(0, -6*u, u, u, '#ff88aa');
+        // 4 Engines
+        px(-5*u, 0, u, 3*u, '#ff0066');
+        px(-u, 3*u, u, 2*u, '#ff0066');
+        px(0, 3*u, u, 2*u, '#ff0066');
+        px(4*u, 0, u, 3*u, '#ff0066');
         break;
-
-      case 'octagon': // Goliath: Fortress
-        ctx.beginPath();
-        for (let i = 0; i < 8; i++) {
-          const a = (Math.PI*2/8)*i; const nx = Math.cos(a)*s, ny = Math.sin(a)*s;
-          if (i===0) ctx.moveTo(nx, ny); else ctx.lineTo(nx, ny);
-        }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        // Double hull
-        ctx.beginPath();
-        for (let i = 0; i < 8; i++) {
-          const a = (Math.PI*2/8)*i; const r = s*0.7;
-          if (i===0) ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r);
-          else ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
-        }
-        ctx.closePath(); ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, s*0.25, 0, Math.PI*2);
-        ctx.fillStyle = color; ctx.fill();
+      }
+      case 'octagon': { // Goliath — Massive carrier
+        const u = s * 0.12;
+        px(-5*u, -4*u, 10*u, 8*u, color);
+        px(-3*u, -6*u, 6*u, 2*u, color);
+        px(-7*u, -2*u, 2*u, 4*u, color);
+        px(5*u, -2*u, 2*u, 4*u, color);
+        // Armor plates
+        px(-4*u, -5*u, u, 9*u, 'rgba(255,255,255,0.15)');
+        px(3*u, -5*u, u, 9*u, 'rgba(255,255,255,0.15)');
+        // Bridge
+        px(-2*u, -5*u, 4*u, 2*u, '#cccccc');
+        px(-u, -6*u, 2*u, u, '#ffffff');
+        // Engines
+        px(-4*u, 4*u, 2*u, 4*u, '#ff6600');
+        px(-u, 4*u, 2*u, 3*u, '#ff6600');
+        px(u, 4*u, 2*u, 3*u, '#ff6600');
+        px(2*u, 4*u, 2*u, 4*u, '#ff6600');
+        px(-3*u, 7*u, 6*u, u, '#ffaa44');
         break;
-
-      case 'ufo': // Overlord: Command Ship
-        ctx.beginPath(); ctx.ellipse(0, 0, s*1.6, s*0.7, 0, 0, Math.PI*2);
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, -s*0.2, s*0.6, Math.PI, 0);
-        ctx.fillStyle = `rgba(255,255,255,0.15)`; ctx.fill(); ctx.stroke();
-        // Weapons
-        ctx.fillStyle = color;
-        for (let i = -2; i <= 2; i++) {
-          ctx.fillRect(i*s*0.4 - 2, s*0.45, 4, 8);
-        }
-        // Crown
-        ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(-s*0.4, -s*0.6); ctx.lineTo(-s*0.2, -s*0.9);
-        ctx.lineTo(0, -s*0.7); ctx.lineTo(s*0.2, -s*0.9); ctx.lineTo(s*0.4, -s*0.6);
-        ctx.stroke();
+      }
+      case 'ufo': { // Overlord — Boss command ship
+        const u = s * 0.11;
+        // Large body
+        px(-7*u, -3*u, 14*u, 5*u, color);
+        px(-5*u, -5*u, 10*u, 2*u, color);
+        px(-3*u, -6*u, 6*u, u, color);
+        px(-9*u, -u, 2*u, 3*u, color);
+        px(7*u, -u, 2*u, 3*u, color);
+        // Command dome
+        px(-3*u, -7*u, 6*u, 2*u, '#ffcc00');
+        px(-2*u, -8*u, 4*u, u, '#ffee44');
+        // Windows
+        px(-5*u, -4*u, 2*u, u, '#88ccff');
+        px(-u, -4*u, 2*u, u, '#88ccff');
+        px(3*u, -4*u, 2*u, u, '#88ccff');
+        // Weapon pods
+        px(-8*u, -3*u, u, 5*u, '#ff4444');
+        px(7*u, -3*u, u, 5*u, '#ff4444');
+        // Engines (massive)
+        px(-5*u, 2*u, 2*u, 4*u, '#ff4400');
+        px(-2*u, 2*u, 2*u, 3*u, '#ff6600');
+        px(0, 2*u, 2*u, 3*u, '#ff6600');
+        px(3*u, 2*u, 2*u, 4*u, '#ff4400');
+        px(-4*u, 5*u, 8*u, u, '#ffaa44');
         break;
-
-      default:
-        ctx.beginPath();
-        ctx.moveTo(0, -s*1.4); ctx.lineTo(s*0.8, 0); ctx.lineTo(0, s*1.4); ctx.lineTo(-s*0.8, 0);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+      default: {
+        const u = s * 0.18;
+        px(-2*u, -4*u, 4*u, 6*u, color);
+        px(-u, -5*u, 2*u, u, color);
+        px(-u, 2*u, u, 2*u, '#4488ff');
+        px(0, 2*u, u, 2*u, '#4488ff');
         break;
+      }
     }
   }
 
@@ -1344,10 +1426,8 @@
       if (e.x < camera.x - 100 || e.x > camera.x + camera.width + 100 || e.y < camera.y - 100 || e.y > camera.y + camera.height + 100) continue;
       ctx.save();
       ctx.translate(e.x, e.y);
-      ctx.strokeStyle = e.color;
       ctx.fillStyle = 'rgba(10, 10, 20, 0.9)';
       ctx.lineWidth = 1.5;
-      ctx.rotate(frame * 0.02 * (e.speed > 2.0 ? 2 : 1));
 
       drawEnemyShape(e.type, e.size, e.color);
 
