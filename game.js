@@ -266,7 +266,6 @@
   let isFiring = false;
   let mouseX = 0, mouseY = 0;
   let isMouseDown = false;
-  let mouseActive = false; // Only true after first click
 
   window.selectSkin = function(type) {
     player.skin.type = type;
@@ -362,15 +361,14 @@
   });
   document.addEventListener('keyup', (e) => { keys[e.key] = false; keyHoldTimers[e.key] = 0; });
 
-  // Mouse aiming & click-to-fire (PC) — ignored until first click
+  // Mouse: ONLY active while button is held down
   canvas.addEventListener('mousemove', (e) => {
-    if (isMobile || gameState !== 'PLAYING' || !mouseActive) return;
+    if (isMobile || gameState !== 'PLAYING' || !isMouseDown) return;
     mouseX = e.clientX + camera.x;
     mouseY = e.clientY + camera.y;
   });
   canvas.addEventListener('mousedown', (e) => {
     if (isMobile || gameState !== 'PLAYING') return;
-    mouseActive = true;
     isMouseDown = true;
     mouseX = e.clientX + camera.x;
     mouseY = e.clientY + camera.y;
@@ -438,129 +436,27 @@
   }
 
   /* =========================================================
-     PARALLAX GALAXY & STARS
+     BACKGROUND — Pre-rendered image (no per-frame cost)
      ========================================================= */
-  const starLayers = [
-    { count: 150, speed: 0.1, sizeRange: [0.5, 1.5], stars: [] },
-    { count: 100, speed: 0.3, sizeRange: [1, 2], stars: [] },
-    { count: 50, speed: 0.7, sizeRange: [1.5, 3], stars: [] }
-  ];
+  const bgImage = new Image();
+  bgImage.src = 'space_bg.png';
+  let bgReady = false;
+  // Pre-render full world background once image loads
+  const bgCanvas = document.createElement('canvas');
+  bgCanvas.width = WORLD.WIDTH;
+  bgCanvas.height = WORLD.HEIGHT;
+  const bgCtx = bgCanvas.getContext('2d');
 
-  starLayers.forEach((layer, idx) => {
-    for (let i = 0; i < layer.count; i++) {
-      const isPlanet = idx === 0 && Math.random() < 0.05;
-      layer.stars.push({
-        x: Math.random() * WORLD.WIDTH,
-        y: Math.random() * WORLD.HEIGHT,
-        size: isPlanet ? Math.random() * 25 + 12 : Math.random() * (layer.sizeRange[1] - layer.sizeRange[0]) + layer.sizeRange[0],
-        alpha: Math.random() * 0.5 + 0.2,
-        isPlanet,
-        color: isPlanet ? `hsl(${Math.random()*360}, 50%, 55%)` : '#ffffff',
-        twinkleSpeed: Math.random() * 0.04 + 0.01
-      });
-    }
-  });
-
-  // Comets
-  const comets = [];
-  for (let i = 0; i < 5; i++) {
-    comets.push({
-      x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-      speed: Math.random() * 2 + 1.5, angle: Math.random() * 0.5 + 0.3,
-      length: Math.random() * 40 + 20, alpha: Math.random() * 0.4 + 0.2
-    });
-  }
-
-  // Nebulae — vibrant purple/blue/pink/teal like deep space reference
-  const nebulae = [];
-  const nebulaColors = [
-    {hue:280, sat:70, lit:35}, // Purple
-    {hue:220, sat:80, lit:40}, // Deep blue
-    {hue:320, sat:60, lit:35}, // Pink/magenta
-    {hue:180, sat:50, lit:30}, // Teal
-    {hue:260, sat:65, lit:30}, // Violet
-    {hue:340, sat:55, lit:30}, // Rose
-    {hue:200, sat:70, lit:35}, // Cyan-blue
-    {hue:290, sat:50, lit:25}, // Dark purple
-    {hue:10, sat:50, lit:25},  // Dark red
-    {hue:240, sat:60, lit:30}, // Royal blue
-  ];
-  for (let i = 0; i < 10; i++) {
-    const c = nebulaColors[i];
-    nebulae.push({
-      x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-      size: Math.random() * 350 + 150,
-      hue: c.hue, sat: c.sat, lit: c.lit,
-      alpha: Math.random() * 0.08 + 0.03
-    });
-  }
-
-  function drawParallaxBackground() {
-    // Nebulae (far background glow)
-    for (const n of nebulae) {
-      const nx = n.x - camera.x * 0.05;
-      const ny = n.y - camera.y * 0.05;
-      if (nx > -n.size && nx < camera.width + n.size && ny > -n.size && ny < camera.height + n.size) {
-        const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, n.size);
-        g.addColorStop(0, `hsla(${n.hue}, ${n.sat}%, ${n.lit}%, ${n.alpha * 2})`);
-        g.addColorStop(0.4, `hsla(${n.hue}, ${n.sat}%, ${n.lit}%, ${n.alpha})`);
-        g.addColorStop(1, 'transparent');
-        ctx.fillStyle = g;
-        ctx.fillRect(nx - n.size, ny - n.size, n.size * 2, n.size * 2);
+  bgImage.onload = function() {
+    // Tile the image across the world
+    const pw = bgImage.width, ph = bgImage.height;
+    for (let x = 0; x < WORLD.WIDTH; x += pw) {
+      for (let y = 0; y < WORLD.HEIGHT; y += ph) {
+        bgCtx.drawImage(bgImage, x, y, pw, ph);
       }
     }
-
-    // Star layers
-    starLayers.forEach(layer => {
-      for (const s of layer.stars) {
-        const dx = s.x - camera.x * (1 - layer.speed);
-        const dy = s.y - camera.y * (1 - layer.speed);
-        let px = dx % WORLD.WIDTH; if (px < 0) px += WORLD.WIDTH;
-        let py = dy % WORLD.HEIGHT; if (py < 0) py += WORLD.HEIGHT;
-        if (px < camera.width && py < camera.height) {
-          if (s.isPlanet) {
-            const g = ctx.createRadialGradient(px - s.size*0.3, py - s.size*0.3, s.size*0.1, px, py, s.size);
-            g.addColorStop(0, s.color);
-            g.addColorStop(0.7, s.color);
-            g.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = g;
-            ctx.beginPath(); ctx.arc(px, py, s.size, 0, Math.PI * 2); ctx.fill();
-            // Ring
-            ctx.strokeStyle = `rgba(255,255,255,${s.alpha*0.25})`;
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.ellipse(px, py, s.size*1.4, s.size*0.3, 0.3, 0, Math.PI*2); ctx.stroke();
-          } else {
-            const twinkle = s.alpha + Math.sin(frame * s.twinkleSpeed) * 0.15;
-            ctx.fillStyle = `rgba(255,255,255,${Math.max(0,twinkle)})`;
-            ctx.fillRect(px, py, s.size, s.size);
-          }
-        }
-      }
-    });
-
-    // Comets
-    for (const c of comets) {
-      c.x += Math.cos(c.angle) * c.speed;
-      c.y += Math.sin(c.angle) * c.speed;
-      if (c.x > WORLD.WIDTH + 100) { c.x = -50; c.y = Math.random() * WORLD.HEIGHT; }
-      if (c.y > WORLD.HEIGHT + 100) { c.y = -50; c.x = Math.random() * WORLD.WIDTH; }
-      const cx = c.x - camera.x * 0.4;
-      const cy = c.y - camera.y * 0.4;
-      if (cx > -c.length && cx < camera.width + c.length && cy > -c.length && cy < camera.height + c.length) {
-        ctx.save();
-        ctx.globalAlpha = c.alpha;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx - Math.cos(c.angle) * c.length, cy - Math.sin(c.angle) * c.length);
-        ctx.stroke();
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      }
-    }
-  }
+    bgReady = true;
+  };
 
   /* =========================================================
      PARTICLES
@@ -713,18 +609,18 @@
     player.x += moveX;
     player.y += moveY;
 
-    // Smooth rotation: mouse takes priority if active, else keyboard direction
+    // Rotation: mouse ONLY while held, otherwise keyboard
     let targetAngle = player.angle;
-    if (mouseActive && !isMobile) {
+    if (isMouseDown && !isMobile) {
       targetAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
     } else if (Math.abs(kbDirX) > 0.01 || Math.abs(kbDirY) > 0.01) {
       targetAngle = Math.atan2(kbDirY, kbDirX);
     }
-    // Smooth lerp rotation (always fluid)
+    // Smooth lerp rotation
     let angleDiff = targetAngle - player.angle;
     angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
     if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    player.angle += angleDiff * 0.12;
+    player.angle += angleDiff * 0.15;
 
     // Apply Slowness Debuff
     if (player.debuffs.slow > 0) {
@@ -1203,203 +1099,234 @@
   }
 
   /* =========================================================
-     DRAWING — DETAILED ENEMY SHIPS
+     DRAWING — REALISTIC VECTOR ENEMY SHIPS
      ========================================================= */
   function drawEnemyShape(type, s, color) {
-    // Pixel-art spaceship style with engine flames
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = color;
-    ctx.lineJoin = 'miter';
+    ctx.lineJoin = 'round';
 
-    // Helper: draw pixel block
-    const px = (x, y, w, h, c) => {
-      ctx.fillStyle = c || color;
+    // Helpers
+    const hull = (path, c) => {
+      const g = ctx.createLinearGradient(0, -s, 0, s);
+      g.addColorStop(0, c || color);
+      g.addColorStop(0.5, '#1a1a2e');
+      g.addColorStop(1, c || color);
+      ctx.fillStyle = g;
+      ctx.strokeStyle = color;
+      ctx.fill(path);
+      ctx.stroke(path);
+    };
+    const engine = (x, y, w, h) => {
+      const eg = ctx.createLinearGradient(x, y, x, y + h);
+      eg.addColorStop(0, '#4488ff');
+      eg.addColorStop(0.5, '#88ccff');
+      eg.addColorStop(1, 'rgba(100,180,255,0)');
+      ctx.fillStyle = eg;
       ctx.fillRect(x, y, w, h);
+    };
+    const cockpit = (x, y, r) => {
+      const cg = ctx.createRadialGradient(x, y - r*0.3, 0, x, y, r);
+      cg.addColorStop(0, '#aaddff');
+      cg.addColorStop(1, '#224466');
+      ctx.fillStyle = cg;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
     };
 
     switch (type) {
-      case 'circle': { // Morg — Small scout ship
-        const u = s * 0.18;
-        // Body
-        px(-2*u, -4*u, 4*u, 6*u, color);
-        px(-3*u, -2*u, 6*u, 3*u, color);
-        px(-1*u, -5*u, 2*u, u, color);
-        // Cockpit
-        px(-u, -4*u, 2*u, 2*u, '#ffdd44');
-        px(0, -5*u, u, u, '#ffee88');
-        // Wings
-        px(-5*u, -u, 2*u, 3*u, color);
-        px(3*u, -u, 2*u, 3*u, color);
-        // Engines (blue flame)
-        px(-u, 2*u, u, 2*u, '#4488ff');
-        px(0, 2*u, u, 2*u, '#4488ff');
-        px(-u, 3*u, u, u, '#88ccff');
-        px(0, 3*u, u, u, '#88ccff');
+      case 'circle': { // Morg — Scout drone
+        const p = new Path2D();
+        p.moveTo(0, -s*1.2);
+        p.lineTo(s*0.5, -s*0.4); p.lineTo(s*1.1, 0); p.lineTo(s*0.5, s*0.6);
+        p.lineTo(0, s*0.8);
+        p.lineTo(-s*0.5, s*0.6); p.lineTo(-s*1.1, 0); p.lineTo(-s*0.5, -s*0.4);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.3, s*0.25);
+        engine(-s*0.2, s*0.6, s*0.15, s*0.6);
+        engine(s*0.05, s*0.6, s*0.15, s*0.6);
         break;
       }
       case 'triangle': { // Stinger — Fast interceptor
-        const u = s * 0.16;
-        px(-u, -6*u, 2*u, 8*u, color);
-        px(-3*u, -2*u, 6*u, 3*u, color);
-        px(-5*u, 0, 2*u, 2*u, color);
-        px(3*u, 0, 2*u, 2*u, color);
-        // Nose
-        px(0, -7*u, u, u, '#ffffff');
-        // Cockpit
-        px(-u, -5*u, 2*u, u, '#ffaa00');
-        // Engines
-        px(-4*u, 2*u, u, 3*u, '#00ccff');
-        px(-u, 2*u, u, 2*u, '#00ccff');
-        px(0, 2*u, u, 2*u, '#00ccff');
-        px(3*u, 2*u, u, 3*u, '#00ccff');
-        px(-4*u, 4*u, u, u, '#aaeeff');
-        px(3*u, 4*u, u, u, '#aaeeff');
+        const p = new Path2D();
+        p.moveTo(0, -s*1.8);
+        p.lineTo(s*0.4, -s*0.6); p.lineTo(s*1.3, s*0.2); p.lineTo(s*0.5, s*0.8);
+        p.lineTo(0, s*0.5);
+        p.lineTo(-s*0.5, s*0.8); p.lineTo(-s*1.3, s*0.2); p.lineTo(-s*0.4, -s*0.6);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.6, s*0.2);
+        // Detail lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.beginPath(); ctx.moveTo(-s*0.3, -s*0.2); ctx.lineTo(-s*1, s*0.2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(s*0.3, -s*0.2); ctx.lineTo(s*1, s*0.2); ctx.stroke();
+        engine(-s*0.6, s*0.7, s*0.12, s*0.8);
+        engine(-s*0.1, s*0.4, s*0.2, s*0.7);
+        engine(s*0.5, s*0.7, s*0.12, s*0.8);
         break;
       }
-      case 'square': { // Titan — Heavy battleship
-        const u = s * 0.14;
-        // Wide body
-        px(-4*u, -3*u, 8*u, 6*u, color);
-        px(-2*u, -5*u, 4*u, 2*u, color);
-        px(-6*u, -u, 2*u, 4*u, color);
-        px(4*u, -u, 2*u, 4*u, color);
-        // Armor lines
-        px(-3*u, -4*u, u, 7*u, 'rgba(255,255,255,0.2)');
-        px(2*u, -4*u, u, 7*u, 'rgba(255,255,255,0.2)');
-        // Turret
-        px(-u, -4*u, 2*u, 2*u, '#ffcc00');
-        // Engines
-        px(-3*u, 3*u, 2*u, 3*u, '#ff4400');
-        px(u, 3*u, 2*u, 3*u, '#ff4400');
-        px(-3*u, 5*u, 2*u, u, '#ffaa44');
-        px(u, 5*u, 2*u, u, '#ffaa44');
+      case 'square': { // Titan — Heavy battlecruiser
+        const p = new Path2D();
+        p.moveTo(0, -s*1.2);
+        p.lineTo(s*0.6, -s*0.8); p.lineTo(s*1.0, -s*0.2); p.lineTo(s*1.0, s*0.6);
+        p.lineTo(s*0.6, s*1.0); p.lineTo(-s*0.6, s*1.0); p.lineTo(-s*1.0, s*0.6);
+        p.lineTo(-s*1.0, -s*0.2); p.lineTo(-s*0.6, -s*0.8);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.5, s*0.22);
+        // Armor seams
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.beginPath(); ctx.moveTo(-s*0.4, -s*0.8); ctx.lineTo(-s*0.4, s*0.9); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(s*0.4, -s*0.8); ctx.lineTo(s*0.4, s*0.9); ctx.stroke();
+        // Turrets
+        ctx.fillStyle = '#888';
+        ctx.fillRect(-s*0.12, -s*1.0, s*0.24, s*0.4);
+        engine(-s*0.5, s*0.9, s*0.25, s*0.7);
+        engine(s*0.25, s*0.9, s*0.25, s*0.7);
         break;
       }
-      case 'pentagon': { // Vanguard
-        const u = s * 0.16;
-        px(-2*u, -5*u, 4*u, 7*u, color);
-        px(-4*u, -2*u, 8*u, 3*u, color);
-        px(-u, -6*u, 2*u, u, '#ffffff');
-        px(-u, -5*u, 2*u, u, '#88ff88');
-        // Engines
-        px(-3*u, 2*u, u, 2*u, '#44ff44');
-        px(2*u, 2*u, u, 2*u, '#44ff44');
-        px(-u, 2*u, 2*u, 3*u, '#44ff44');
-        px(0, 4*u, u, u, '#aaffaa');
+      case 'pentagon': { // Vanguard — Escort fighter
+        const p = new Path2D();
+        p.moveTo(0, -s*1.5);
+        p.lineTo(s*0.6, -s*0.3); p.lineTo(s*0.9, s*0.4);
+        p.lineTo(s*0.3, s*0.9); p.lineTo(-s*0.3, s*0.9);
+        p.lineTo(-s*0.9, s*0.4); p.lineTo(-s*0.6, -s*0.3);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.4, s*0.2);
+        engine(-s*0.15, s*0.8, s*0.12, s*0.5);
+        engine(s*0.05, s*0.8, s*0.12, s*0.5);
         break;
       }
-      case 'hexagon': { // Wasp — Agile fighter
-        const u = s * 0.17;
-        px(-u, -5*u, 2*u, 7*u, color);
-        px(-3*u, -3*u, 6*u, 4*u, color);
-        px(-5*u, -u, 2*u, 2*u, color);
-        px(3*u, -u, 2*u, 2*u, color);
-        px(-u, -5*u, 2*u, u, '#ffff44');
-        // Engines (yellow)
-        px(-2*u, 2*u, u, 3*u, '#ffcc00');
-        px(u, 2*u, u, 3*u, '#ffcc00');
-        px(-2*u, 4*u, u, u, '#ffee88');
-        px(u, 4*u, u, u, '#ffee88');
+      case 'hexagon': { // Wasp — Agile striker
+        const p = new Path2D();
+        p.moveTo(0, -s*1.6);
+        p.lineTo(s*0.35, -s*0.7); p.lineTo(s*1.2, -s*0.1);
+        p.lineTo(s*0.35, s*0.5); p.lineTo(0, s*0.7);
+        p.lineTo(-s*0.35, s*0.5); p.lineTo(-s*1.2, -s*0.1);
+        p.lineTo(-s*0.35, -s*0.7);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.5, s*0.18);
+        ctx.strokeStyle = color;
+        ctx.beginPath(); ctx.moveTo(-s*1.2, -s*0.1); ctx.lineTo(-s*1.5, -s*0.5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(s*1.2, -s*0.1); ctx.lineTo(s*1.5, -s*0.5); ctx.stroke();
+        engine(-s*0.15, s*0.6, s*0.1, s*0.6);
+        engine(s*0.05, s*0.6, s*0.1, s*0.6);
         break;
       }
-      case 'star': { // Pulsar — Heavy energy ship
-        const u = s * 0.15;
-        px(-2*u, -6*u, 4*u, 9*u, color);
-        px(-5*u, -2*u, 10*u, 3*u, color);
-        px(-3*u, -4*u, 6*u, 2*u, color);
-        // Core
-        px(-u, -3*u, 2*u, 2*u, '#ffffff');
-        px(0, -4*u, u, u, '#88ccff');
-        // Wings detail
-        px(-6*u, -u, u, 2*u, 'rgba(255,255,255,0.3)');
-        px(5*u, -u, u, 2*u, 'rgba(255,255,255,0.3)');
-        // Engines
-        px(-2*u, 3*u, u, 3*u, '#3388ff');
-        px(-u, 3*u, 2*u, 2*u, '#3388ff');
-        px(u, 3*u, u, 3*u, '#3388ff');
-        px(-u, 5*u, 2*u, u, '#aaccff');
+      case 'star': { // Pulsar — Energy warship
+        const p = new Path2D();
+        p.moveTo(0, -s*1.4);
+        p.lineTo(s*0.5, -s*0.5); p.lineTo(s*1.4, 0);
+        p.lineTo(s*0.5, s*0.5); p.lineTo(0, s*1.0);
+        p.lineTo(-s*0.5, s*0.5); p.lineTo(-s*1.4, 0);
+        p.lineTo(-s*0.5, -s*0.5);
+        p.closePath();
+        hull(p);
+        // Energy core
+        const coreG = ctx.createRadialGradient(0, 0, 0, 0, 0, s*0.4);
+        coreG.addColorStop(0, '#ffffff');
+        coreG.addColorStop(0.5, color);
+        coreG.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = coreG;
+        ctx.beginPath(); ctx.arc(0, 0, s*0.4, 0, Math.PI*2); ctx.fill();
+        engine(-s*0.2, s*0.9, s*0.15, s*0.6);
+        engine(s*0.05, s*0.9, s*0.15, s*0.6);
         break;
       }
       case 'diamond': { // Razor — Needle fighter
-        const u = s * 0.2;
-        px(0, -5*u, u, 8*u, color);
-        px(-u, -3*u, 3*u, 4*u, color);
-        px(-2*u, -u, 5*u, 2*u, color);
-        px(0, -6*u, u, u, '#ffffff');
-        // Engines
-        px(0, 3*u, u, 3*u, '#00ffcc');
-        px(0, 5*u, u, u, '#aaffee');
+        const p = new Path2D();
+        p.moveTo(0, -s*2.0);
+        p.lineTo(s*0.35, -s*0.4); p.lineTo(s*0.6, s*0.2);
+        p.lineTo(s*0.25, s*0.8); p.lineTo(0, s*0.6);
+        p.lineTo(-s*0.25, s*0.8); p.lineTo(-s*0.6, s*0.2);
+        p.lineTo(-s*0.35, -s*0.4);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.7, s*0.15);
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.beginPath(); ctx.moveTo(0, -s*1.8); ctx.lineTo(0, s*0.5); ctx.stroke();
+        engine(-s*0.05, s*0.7, s*0.1, s*0.8);
         break;
       }
-      case 'cross': { // Interceptor — X-wing style
-        const u = s * 0.14;
-        px(-u, -6*u, 2*u, 9*u, color);
-        px(-5*u, -2*u, 10*u, 2*u, color);
-        // Wing tips
-        px(-6*u, -3*u, u, 4*u, color);
-        px(5*u, -3*u, u, 4*u, color);
-        // Cockpit
-        px(-u, -5*u, 2*u, 2*u, '#ff4488');
-        px(0, -6*u, u, u, '#ff88aa');
-        // 4 Engines
-        px(-5*u, 0, u, 3*u, '#ff0066');
-        px(-u, 3*u, u, 2*u, '#ff0066');
-        px(0, 3*u, u, 2*u, '#ff0066');
-        px(4*u, 0, u, 3*u, '#ff0066');
+      case 'cross': { // Interceptor — X-wing assault
+        const p = new Path2D();
+        p.moveTo(0, -s*1.5);
+        p.lineTo(s*0.3, -s*0.5); p.lineTo(s*1.3, -s*0.4);
+        p.lineTo(s*1.3, s*0.1); p.lineTo(s*0.3, s*0.3);
+        p.lineTo(0, s*0.8);
+        p.lineTo(-s*0.3, s*0.3); p.lineTo(-s*1.3, s*0.1);
+        p.lineTo(-s*1.3, -s*0.4); p.lineTo(-s*0.3, -s*0.5);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.4, s*0.2);
+        // Wing weapons
+        ctx.fillStyle = '#ff4466';
+        ctx.fillRect(-s*1.2, -s*0.5, s*0.08, s*0.6);
+        ctx.fillRect(s*1.1, -s*0.5, s*0.08, s*0.6);
+        engine(-s*0.8, s*0.05, s*0.1, s*0.5);
+        engine(-s*0.1, s*0.7, s*0.08, s*0.5);
+        engine(s*0.02, s*0.7, s*0.08, s*0.5);
+        engine(s*0.7, s*0.05, s*0.1, s*0.5);
         break;
       }
-      case 'octagon': { // Goliath — Massive carrier
-        const u = s * 0.12;
-        px(-5*u, -4*u, 10*u, 8*u, color);
-        px(-3*u, -6*u, 6*u, 2*u, color);
-        px(-7*u, -2*u, 2*u, 4*u, color);
-        px(5*u, -2*u, 2*u, 4*u, color);
-        // Armor plates
-        px(-4*u, -5*u, u, 9*u, 'rgba(255,255,255,0.15)');
-        px(3*u, -5*u, u, 9*u, 'rgba(255,255,255,0.15)');
-        // Bridge
-        px(-2*u, -5*u, 4*u, 2*u, '#cccccc');
-        px(-u, -6*u, 2*u, u, '#ffffff');
-        // Engines
-        px(-4*u, 4*u, 2*u, 4*u, '#ff6600');
-        px(-u, 4*u, 2*u, 3*u, '#ff6600');
-        px(u, 4*u, 2*u, 3*u, '#ff6600');
-        px(2*u, 4*u, 2*u, 4*u, '#ff6600');
-        px(-3*u, 7*u, 6*u, u, '#ffaa44');
+      case 'octagon': { // Goliath — Heavy carrier
+        const p = new Path2D();
+        p.moveTo(-s*0.4, -s*1.3); p.lineTo(s*0.4, -s*1.3);
+        p.lineTo(s*1.0, -s*0.6); p.lineTo(s*1.0, s*0.6);
+        p.lineTo(s*0.4, s*1.1); p.lineTo(-s*0.4, s*1.1);
+        p.lineTo(-s*1.0, s*0.6); p.lineTo(-s*1.0, -s*0.6);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.6, s*0.25);
+        // Hull details
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.beginPath(); ctx.rect(-s*0.7, -s*0.4, s*1.4, s*0.6); ctx.stroke();
+        // Antenna
+        ctx.strokeStyle = '#aaa';
+        ctx.beginPath(); ctx.moveTo(0, -s*1.3); ctx.lineTo(0, -s*1.7); ctx.stroke();
+        engine(-s*0.5, s*1.0, s*0.2, s*0.8);
+        engine(-s*0.1, s*1.0, s*0.2, s*0.7);
+        engine(s*0.3, s*1.0, s*0.2, s*0.8);
         break;
       }
-      case 'ufo': { // Overlord — Boss command ship
-        const u = s * 0.11;
-        // Large body
-        px(-7*u, -3*u, 14*u, 5*u, color);
-        px(-5*u, -5*u, 10*u, 2*u, color);
-        px(-3*u, -6*u, 6*u, u, color);
-        px(-9*u, -u, 2*u, 3*u, color);
-        px(7*u, -u, 2*u, 3*u, color);
-        // Command dome
-        px(-3*u, -7*u, 6*u, 2*u, '#ffcc00');
-        px(-2*u, -8*u, 4*u, u, '#ffee44');
+      case 'ufo': { // Overlord — Command mothership
+        const p = new Path2D();
+        p.moveTo(0, -s*1.0);
+        p.lineTo(s*0.8, -s*0.6); p.lineTo(s*1.8, -s*0.1);
+        p.lineTo(s*1.8, s*0.3); p.lineTo(s*0.8, s*0.7);
+        p.lineTo(0, s*0.9);
+        p.lineTo(-s*0.8, s*0.7); p.lineTo(-s*1.8, s*0.3);
+        p.lineTo(-s*1.8, -s*0.1); p.lineTo(-s*0.8, -s*0.6);
+        p.closePath();
+        hull(p);
+        // Command bridge
+        const bg = ctx.createRadialGradient(0, -s*0.3, 0, 0, -s*0.3, s*0.4);
+        bg.addColorStop(0, '#ffdd44');
+        bg.addColorStop(1, '#664400');
+        ctx.fillStyle = bg;
+        ctx.beginPath(); ctx.ellipse(0, -s*0.3, s*0.4, s*0.25, 0, 0, Math.PI*2); ctx.fill();
         // Windows
-        px(-5*u, -4*u, 2*u, u, '#88ccff');
-        px(-u, -4*u, 2*u, u, '#88ccff');
-        px(3*u, -4*u, 2*u, u, '#88ccff');
-        // Weapon pods
-        px(-8*u, -3*u, u, 5*u, '#ff4444');
-        px(7*u, -3*u, u, 5*u, '#ff4444');
-        // Engines (massive)
-        px(-5*u, 2*u, 2*u, 4*u, '#ff4400');
-        px(-2*u, 2*u, 2*u, 3*u, '#ff6600');
-        px(0, 2*u, 2*u, 3*u, '#ff6600');
-        px(3*u, 2*u, 2*u, 4*u, '#ff4400');
-        px(-4*u, 5*u, 8*u, u, '#ffaa44');
+        ctx.fillStyle = '#88ccff';
+        for (let i = -2; i <= 2; i++) {
+          ctx.beginPath(); ctx.arc(i*s*0.35, -s*0.1, s*0.06, 0, Math.PI*2); ctx.fill();
+        }
+        // Weapon rails
+        ctx.fillStyle = '#cc3333';
+        ctx.fillRect(-s*1.7, -s*0.2, s*0.08, s*0.5);
+        ctx.fillRect(s*1.6, -s*0.2, s*0.08, s*0.5);
+        engine(-s*0.6, s*0.8, s*0.2, s*0.8);
+        engine(-s*0.1, s*0.8, s*0.2, s*0.6);
+        engine(s*0.4, s*0.8, s*0.2, s*0.8);
         break;
       }
       default: {
-        const u = s * 0.18;
-        px(-2*u, -4*u, 4*u, 6*u, color);
-        px(-u, -5*u, 2*u, u, color);
-        px(-u, 2*u, u, 2*u, '#4488ff');
-        px(0, 2*u, u, 2*u, '#4488ff');
+        const p = new Path2D();
+        p.moveTo(0, -s*1.3); p.lineTo(s*0.7, 0); p.lineTo(0, s*1.0); p.lineTo(-s*0.7, 0);
+        p.closePath();
+        hull(p);
+        cockpit(0, -s*0.3, s*0.2);
+        engine(-s*0.05, s*0.9, s*0.1, s*0.5);
         break;
       }
     }
@@ -1583,10 +1510,12 @@
       shakeAmt *= 0.9;
     }
 
-    // Background (Parallax)
-    drawParallaxBackground();
-
     ctx.translate(-camera.x, -camera.y);
+
+    // Background — single drawImage call (fast)
+    if (bgReady) {
+      ctx.drawImage(bgCanvas, 0, 0);
+    }
 
     // World border
     ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)';
