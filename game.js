@@ -141,6 +141,14 @@
       localStorage.setItem(`${SAVE_KEY}_history`, JSON.stringify(history));
     },
 
+    deleteHistoryItem(index) {
+      const history = this.getHistory();
+      if (index >= 0 && index < history.length) {
+        history.splice(index, 1);
+        localStorage.setItem(`${SAVE_KEY}_history`, JSON.stringify(history));
+      }
+    },
+
     clearHistory() { localStorage.removeItem(`${SAVE_KEY}_history`); },
 
     reset() {
@@ -401,14 +409,56 @@
   }
 
   /* =========================================================
-     STARS (Background)
+     PARALLAX GALAXY & STARS
      ========================================================= */
-  for (let i = 0; i < STAR_COUNT; i++) {
-    stars.push({
-      x: Math.random() * WORLD.WIDTH,
-      y: Math.random() * WORLD.HEIGHT,
-      size: Math.random() * 2 + 1,
-      alpha: Math.random(),
+  const starLayers = [
+    { count: 150, speed: 0.1, sizeRange: [0.5, 1.5], stars: [] },
+    { count: 100, speed: 0.3, sizeRange: [1, 2], stars: [] },
+    { count: 50, speed: 0.7, sizeRange: [1.5, 3], stars: [] }
+  ];
+
+  starLayers.forEach((layer, idx) => {
+    for (let i = 0; i < layer.count; i++) {
+        const isPlanet = idx === 0 && Math.random() < 0.05; // 5% of furthest stars are planets
+      layer.stars.push({
+        x: Math.random() * WORLD.WIDTH,
+        y: Math.random() * WORLD.HEIGHT,
+        size: isPlanet ? Math.random() * 20 + 10 : Math.random() * (layer.sizeRange[1] - layer.sizeRange[0]) + layer.sizeRange[0],
+        alpha: Math.random() * 0.5 + 0.2,
+        isPlanet,
+        color: isPlanet ? `hsl(${Math.random()*360}, 40%, 60%)` : '#ffffff'
+      });
+    }
+  });
+
+  function drawParallaxBackground() {
+    starLayers.forEach(layer => {
+      ctx.save();
+      for (const s of layer.stars) {
+        const dx = (s.x - camera.x * (1 - layer.speed));
+        const dy = (s.y - camera.y * (1 - layer.speed));
+        
+        let px = dx % WORLD.WIDTH; if (px < 0) px += WORLD.WIDTH;
+        let py = dy % WORLD.HEIGHT; if (py < 0) py += WORLD.HEIGHT;
+
+        if (px < camera.width && py < camera.height) {
+          if (s.isPlanet) {
+            // Draw a subtle planet with atmosphere
+            const pGrad = ctx.createRadialGradient(px, py, 1, px, py, s.size);
+            pGrad.addColorStop(0, s.color);
+            pGrad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = pGrad;
+            ctx.beginPath(); ctx.arc(px, py, s.size, 0, Math.PI * 2); ctx.fill();
+            // Subtle ring or crescent
+            ctx.strokeStyle = `rgba(255,255,255,${s.alpha*0.3})`;
+            ctx.beginPath(); ctx.arc(px, py, s.size, -0.5, 2.5); ctx.stroke();
+          } else {
+            ctx.fillStyle = `rgba(255,255,255, ${s.alpha})`;
+            ctx.beginPath(); ctx.arc(px, py, s.size, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+      }
+      ctx.restore();
     });
   }
 
@@ -644,11 +694,12 @@
     for (const e of enemies) {
       const dx = player.x - e.x;
       const dy = player.y - e.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const distSq = dx * dx + dy * dy;
 
-      if (dist > 1) {
-        e.x += (dx / dist) * e.speed;
-        e.y += (dy / dist) * e.speed;
+      if (distSq > 1) {
+        const d = Math.sqrt(distSq);
+        e.x += (dx / d) * e.speed;
+        e.y += (dy / d) * e.speed;
       }
 
       // Enemy AI: Spells vs Bullets
@@ -733,7 +784,12 @@
       }
 
       // Player collision directly with enemy body
-      if (!dead && dist < (player.size + e.size) * 0.7) {
+      const pdx = player.x - e.x;
+      const pdy = player.y - e.y;
+      const distSqBody = pdx * pdx + pdy * pdy;
+      const collisionThreshold = (player.size + e.size) * 0.7;
+      
+      if (!dead && distSqBody < collisionThreshold * collisionThreshold) {
         if (player.powers.shield <= 0) {
           if (!isPractice) player.vida--;
           damageFlash = 1.0;
@@ -965,13 +1021,23 @@
     if (pObj.powers.auto > 0) pColor = '#f7ca18';
     else if (pObj.powers.manual > 0) pColor = '#e67e22';
 
-    if (!isMobile) {
-      targetCtx.shadowBlur = 20;
-      targetCtx.shadowColor = pColor;
+    // Engine Trails (Visual Feedback)
+    if (gameState === 'PLAYING' && targetCtx === ctx) {
+      if (frame % 3 === 0) {
+        createParticles(pObj.x - Math.cos(pObj.angle)*15, pObj.y - Math.sin(pObj.angle)*15, pColor, 2);
+      }
     }
+
     targetCtx.fillStyle = '#101015';
     targetCtx.strokeStyle = pColor;
     targetCtx.lineWidth = 2.5;
+    
+    // Performance: Avoid shadowBlur if it's not essential or on mobile
+    const useGlow = !isMobile && targetCtx === ctx;
+    if (useGlow) {
+      targetCtx.shadowBlur = 15;
+      targetCtx.shadowColor = pColor;
+    }
 
     targetCtx.beginPath();
     if (pObj.skin.type === 'retro_ufo') {
@@ -987,6 +1053,7 @@
     targetCtx.closePath();
     targetCtx.fill();
     targetCtx.stroke();
+    if (useGlow) targetCtx.shadowBlur = 0;
 
     // Phantom wing trails
     if (pObj.skin.type === 'phantom') {
@@ -1118,13 +1185,21 @@
     else ctx.shadowBlur = 0;
 
     for (const b of bullets) {
-      if (!isMobile) ctx.shadowColor = b.color;
+      if (b.x < camera.x - 20 || b.x > camera.x + camera.width + 20 || b.y < camera.y - 20 || b.y > camera.y + camera.height + 20) continue;
+      
+      // Multi-pass glow effect (Digital feel)
       ctx.fillStyle = b.color;
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(b.x - 4, b.y - 4, 8, 8);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = '#ffffff';
       ctx.fillRect(b.x - 2, b.y - 2, 4, 4);
     }
 
     // Enemies
     for (const e of enemies) {
+      if (e.x < camera.x - 100 || e.x > camera.x + camera.width + 100 || e.y < camera.y - 100 || e.y > camera.y + camera.height + 100) continue;
+      
       ctx.save();
       ctx.translate(e.x, e.y);
       if (!isMobile) {
@@ -1148,7 +1223,6 @@
         ctx.beginPath();
         drawEnemyShape(e.type, e.size * 0.4, '#ffffff');
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.shadowBlur = 20;
         ctx.fill();
       }
       
@@ -1226,41 +1300,56 @@
   /* =========================================================
      HUD UPDATE
      ========================================================= */
+  const cachedUI = { vida: -1, kills: -1, score: -1, time: -1, power: '', ultra: -1 };
   function updateUI() {
-    if (isPractice) {
-      $('vida').innerText = '∞';
-    } else {
-      $('vida').innerText = player.vida;
+    const curVida = isPractice ? '∞' : player.vida;
+    if (cachedUI.vida !== curVida) {
+      $('vida').innerText = curVida;
+      cachedUI.vida = curVida;
     }
-    $('kills').innerText = kills;
-    $('score').innerText = score;
-    $('time').innerText = time;
+    if (cachedUI.kills !== kills) {
+      $('kills').innerText = kills;
+      cachedUI.kills = kills;
+    }
+    if (cachedUI.score !== score) {
+      $('score').innerText = score;
+      cachedUI.score = score;
+    }
+    if (cachedUI.time !== time) {
+      $('time').innerText = time;
+      cachedUI.time = time;
+    }
 
     let txt = '';
     if (player.powers.auto > 0) txt += `<span style="color:#f7ca18; margin-right:8px;">[Auto ${Math.ceil(player.powers.auto / 60)}s]</span>`;
     if (player.powers.manual > 0) txt += `<span style="color:#e67e22; margin-right:8px;">[Manual ${Math.ceil(player.powers.manual / 60)}s]</span>`;
     if (player.powers.speed > 0) txt += `<span style="color:#2ecc71; margin-right:8px;">[Vel ${Math.ceil(player.powers.speed / 60)}s]</span>`;
     if (player.powers.shield > 0) txt += `<span style="color:#3498db; margin-right:8px;">[Escudo ${Math.ceil(player.powers.shield / 60)}s]</span>`;
-    
-    // Debuffs in UI
     if (player.debuffs.slow > 0) txt += `<span style="color:#a349a4; margin-right:8px;">[🐢 LENTA]</span>`;
     if (player.debuffs.disable > 0) txt += `<span style="color:#ff3366; margin-right:8px;">[🚫 BLOQUEO]</span>`;
     if (player.debuffs.noscore > 0) txt += `<span style="color:#e74c3c; margin-right:8px;">[📉 SIN PUNTOS]</span>`;
     if (player.debuffs.powerlock > 0) txt += `<span style="color:#9b59b6; margin-right:8px;">[🔒 PODER LOCK]</span>`;
     
-    $('power').innerHTML = txt || 'Ninguno';
+    if (cachedUI.power !== txt) {
+      $('power').innerHTML = txt || 'Ninguno';
+      cachedUI.power = txt;
+    }
 
-    const uBar = $('ultra-bar');
-    const uBtn = $('ultra-btn');
-    if (uBar) {
-      uBar.style.width = `${(ultraEnergy / ULTRA_MAX) * 100}%`;
-      if (ultraEnergy >= ULTRA_MAX) {
-        uBar.classList.add('ready');
-        if (uBtn) { uBtn.classList.remove('ultra-btn-disabled'); uBtn.classList.add('ultra-btn-ready'); }
-      } else {
-        uBar.classList.remove('ready');
-        if (uBtn) { uBtn.classList.add('ultra-btn-disabled'); uBtn.classList.remove('ultra-btn-ready'); }
+    const uPct = Math.floor((ultraEnergy / ULTRA_MAX) * 100);
+    if (cachedUI.ultra !== uPct) {
+      const uBar = $('ultra-bar');
+      const uBtn = $('ultra-btn');
+      if (uBar) {
+        uBar.style.width = `${uPct}%`;
+        if (ultraEnergy >= ULTRA_MAX) {
+          uBar.classList.add('ready');
+          if (uBtn) { uBtn.classList.remove('ultra-btn-disabled'); uBtn.classList.add('ultra-btn-ready'); }
+        } else {
+          uBar.classList.remove('ready');
+          if (uBtn) { uBtn.classList.add('ultra-btn-disabled'); uBtn.classList.remove('ultra-btn-ready'); }
+        }
       }
+      cachedUI.ultra = uPct;
     }
   }
 
@@ -1286,19 +1375,14 @@
       shakeAmt *= 0.9;
     }
 
+    // Background (Parallax)
+    drawParallaxBackground();
+
     ctx.translate(-camera.x, -camera.y);
 
-    // Stars
-    for (const s of stars) {
-      if (s.x > camera.x && s.x < camera.x + camera.width && s.y > camera.y && s.y < camera.y + camera.height) {
-        ctx.fillStyle = `rgba(255,255,255, ${s.alpha})`;
-        ctx.fillRect(s.x, s.y, s.size, s.size);
-      }
-    }
-
     // World border
-    ctx.strokeStyle = 'rgba(255, 0, 0, 0.4)';
-    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)';
+    ctx.lineWidth = 10;
     ctx.strokeRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
 
     // Update
@@ -1363,17 +1447,20 @@
   /* =========================================================
      MENU LOGIC
      ========================================================= */
-  window.startGame = function(diff) {
-    if (window.initAudio) window.initAudio();
+  window.setupDifficulty = function(diff) {
     selectedDifficulty = diff;
     isPractice = (diff === 'practica');
     isRecordBroken = false;
-    
+    currentMilestoneTarget = 1600;
+    currentUnlockInterval = 700;
+    unlockedEnemies = 1;
+    spawnRate = 120;
+
     switch(diff) {
       case 'practica': diffMultiplier = 0.2; spawnRate = 140; player.vida = 999; break;
-      case 'facil': diffMultiplier = 0.5; spawnRate = 150; break;
-      case 'medio': diffMultiplier = 1.0; spawnRate = 100; break;
-      case 'dificil': diffMultiplier = 1.5; spawnRate = 80; break;
+      case 'facil': diffMultiplier = 0.5; spawnRate = 150; player.vida = 5; break;
+      case 'medio': diffMultiplier = 1.0; spawnRate = 100; player.vida = 5; break;
+      case 'dificil': diffMultiplier = 1.5; spawnRate = 80; player.vida = 4; break;
       case 'hardcore': 
         diffMultiplier = 2.5; 
         spawnRate = 60; 
@@ -1382,11 +1469,14 @@
         currentUnlockInterval = 1200; 
         unlockedEnemies = 3; 
         break;
-      case 'progresivo': diffMultiplier = 1.0; spawnRate = 120; break;
+      case 'progresivo': diffMultiplier = 1.0; spawnRate = 120; player.vida = 5; break;
     }
-    // Correcting parameter call
-    startCountdown(3); 
+  };
 
+  window.startGame = function(diff) {
+    if (window.initAudio) window.initAudio();
+    setupDifficulty(diff);
+    startCountdown(3); 
     setTimeout(drawPreview, 100);
   };
 
@@ -1430,7 +1520,8 @@
     if (countdownInterval) clearInterval(countdownInterval);
     animationId = null;
 
-    // Reset core stats here (Clean start)
+    // Reset Difficulty params (Important for Retry)
+    setupDifficulty(selectedDifficulty);
     score = 0; scoreMilestone = 0;
     kills = 0; killsMilestone = 0;
     time = 0; frame = 0;
@@ -1444,6 +1535,7 @@
     $('start-menu').classList.remove('active');
     $('settings-menu').classList.remove('active');
     $('pause-menu').classList.remove('active');
+    $('levelup-menu').classList.remove('active');
     $('tutorial-menu-overlay').classList.remove('active');
     $('game-over-menu').classList.remove('active');
     
@@ -1591,8 +1683,13 @@
     if (!isPractice) return;
     if (animationId) cancelAnimationFrame(animationId);
     animationId = null;
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+    $('pause-menu').classList.remove('active'); // Close Pause Menu first
     player.vida = 0; 
-    endGame(); // Direct call to ensure it closes
+    endGame(); 
   };
 
   /* =========================================================
@@ -1602,13 +1699,27 @@
     const body = $('history-body');
     body.innerHTML = '';
     const history = Storage.getHistory();
-    history.forEach(h => {
+    history.forEach((h, index) => {
       const row = document.createElement('tr');
       row.className = 'history-row';
-      row.innerHTML = `<td>${h.date}</td><td>${h.mode}</td><td>${h.score}</td><td>${h.kills}</td><td>${h.time}s</td>`;
+      row.innerHTML = `
+        <td>${h.date}</td>
+        <td>${h.mode}</td>
+        <td>${h.score}</td>
+        <td>${h.kills}</td>
+        <td>${h.time}s</td>
+        <td><button class="delete-btn" onclick="deleteHistoryItem(${index})">🗑️</button></td>
+      `;
       body.appendChild(row);
     });
     $('history-menu').classList.add('active');
+  };
+
+  window.deleteHistoryItem = function(index) {
+    if (confirm('¿Eliminar este registro?')) {
+      Storage.deleteHistoryItem(index);
+      window.openHistory();
+    }
   };
 
   window.closeHistory = function() { $('history-menu').classList.remove('active'); };

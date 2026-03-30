@@ -8,7 +8,7 @@
 body {
   margin: 0;
   overflow: hidden;
-  background: #050510;
+  background: radial-gradient(circle at center, #0a0a25 0%, #050510 100%);
   font-family: 'Inter', sans-serif;
   color: white;
   user-select: none;
@@ -253,6 +253,23 @@ canvas { display: block; }
 .history-row:hover td {
   color: #fff;
   background: rgba(0, 255, 255, 0.05);
+}
+
+.delete-btn {
+  background: rgba(255, 51, 102, 0.1);
+  border: 1px solid #ff3366;
+  color: #ff3366;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  background: #ff3366;
+  color: white;
+  box-shadow: 0 0 10px #ff3366;
 }
 
 /* ---- Mobile Controls ---- */
