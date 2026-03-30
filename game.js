@@ -398,33 +398,70 @@
   }
 
   // Touch — virtual joystick
+  function updateJoystickUI(handleUI, stickUI) {
+    if (!joystickOrigin || !joystickCurrent || !handleUI || !stickUI) return;
+    const dx = joystickCurrent.x - joystickOrigin.x;
+    const dy = joystickCurrent.y - joystickOrigin.y;
+    const dist = Math.min(Math.hypot(dx, dy), 40);
+    const angle = Math.atan2(dy, dx);
+    const hx = Math.cos(angle) * dist;
+    const hy = Math.sin(angle) * dist;
+    stickUI.style.left = joystickOrigin.x + 'px';
+    stickUI.style.top = joystickOrigin.y + 'px';
+    handleUI.style.left = (joystickOrigin.x + hx) + 'px';
+    handleUI.style.top = (joystickOrigin.y + hy) + 'px';
+  }
+
   window.addEventListener('touchstart', (e) => {
     isMobile = true;
     if (gameState !== 'PLAYING') return;
-    const touch = e.changedTouches[0];
-    if (touch.clientX < window.innerWidth / 2) {
-      joystickOrigin = { x: touch.clientX, y: touch.clientY };
-      joystickCurrent = { x: touch.clientX, y: touch.clientY };
-      handleUI.style.display = 'block';
-      stickUI.style.display = 'block';
-      updateJoystickUI();
+    
+    document.getElementById('mobile-controls').style.display = 'flex';
+    
+    // Si toca un botón, no activar joystick con este dedo
+    if (e.target.closest('.touch-btn') || e.target.closest('#pause-btn')) return;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (!joystickOrigin) {
+        joystickOrigin = { x: touch.clientX, y: touch.clientY, id: touch.identifier };
+        joystickCurrent = { x: touch.clientX, y: touch.clientY };
+        
+        const stickUI = document.getElementById('joystick-base');
+        const handleUI = document.getElementById('joystick-handle');
+        if (stickUI) stickUI.style.display = 'block';
+        if (handleUI) handleUI.style.display = 'block';
+        
+        updateJoystickUI(handleUI, stickUI);
+        break;
+      }
     }
   }, { passive: false });
+
   window.addEventListener('touchmove', (e) => {
     if (joystickOrigin) {
-      const touch = Array.from(e.touches).find(t => t.clientX < window.innerWidth / 2);
+      const touch = Array.from(e.changedTouches).find(t => t.identifier === joystickOrigin.id);
       if (touch) {
         joystickCurrent = { x: touch.clientX, y: touch.clientY };
-        updateJoystickUI();
+        const stickUI = document.getElementById('joystick-base');
+        const handleUI = document.getElementById('joystick-handle');
+        updateJoystickUI(handleUI, stickUI);
         e.preventDefault();
       }
     }
   }, { passive: false });
+
   window.addEventListener('touchend', (e) => {
-    const hasLeftTouch = Array.from(e.touches).some(t => t.clientX < window.innerWidth / 2);
-    if (!hasLeftTouch) {
-      joystickOrigin = null; joystickCurrent = null;
-      handleUI.style.display = 'none'; stickUI.style.display = 'none';
+    if (joystickOrigin) {
+      const touch = Array.from(e.changedTouches).find(t => t.identifier === joystickOrigin.id);
+      if (touch) {
+        joystickOrigin = null; 
+        joystickCurrent = null;
+        const stickUI = document.getElementById('joystick-base');
+        const handleUI = document.getElementById('joystick-handle');
+        if (stickUI) stickUI.style.display = 'none';
+        if (handleUI) handleUI.style.display = 'none';
+      }
     }
   });
 
@@ -453,45 +490,7 @@
     bgCtx.fillStyle = '#05040a'; // Ultra Deep space
     bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
 
-    const cx = WORLD.WIDTH / 2;
-    const cy = WORLD.HEIGHT / 2;
-
-    // 1. Epic Galaxy Spiral (Central Core)
-    const arms = 3;
-    for (let i = 0; i < 4000; i++) {
-        const radius = Math.pow(Math.random(), 1.5) * 2000;
-        const baseAngle = (radius * 0.003) + (Math.floor(Math.random() * arms) * (Math.PI * 2 / arms));
-        const angleSpread = (1 - (radius/2000)) * (Math.random() * 1.5 - 0.75);
-        const angle = baseAngle + angleSpread;
-        
-        const x = cx + Math.cos(angle) * radius;
-        const y = cy + Math.sin(angle) * radius;
-        
-        const distanceFactor = radius / 2000;
-        const size = Math.random() * 80 + 20;
-        const alpha = Math.max(0, 0.15 - distanceFactor * 0.1);
-        
-        const g = bgCtx.createRadialGradient(x, y, 0, x, y, size);
-        if (distanceFactor < 0.2) {
-            g.addColorStop(0, `rgba(200, 230, 255, ${alpha*1.5})`);
-        } else if (distanceFactor < 0.6) {
-            g.addColorStop(0, `rgba(70, 40, 160, ${alpha})`);
-        } else {
-            g.addColorStop(0, `rgba(140, 20, 90, ${alpha})`);
-        }
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        
-        bgCtx.fillStyle = g;
-        bgCtx.fillRect(x - size, y - size, size * 2, size * 2);
-    }
-    
-    // Core Glow
-    const coreGlow = bgCtx.createRadialGradient(cx, cy, 0, cx, cy, 800);
-    coreGlow.addColorStop(0, 'rgba(255,255,255,0.2)');
-    coreGlow.addColorStop(0.2, 'rgba(100,200,255,0.1)');
-    coreGlow.addColorStop(1, 'rgba(0,0,0,0)');
-    bgCtx.fillStyle = coreGlow;
-    bgCtx.fillRect(cx - 800, cy - 800, 1600, 1600);
+    // Removed giant central galaxy to keep background uniform and non-disruptive.
 
     // 2. Distant Miniature Galaxies (Reference Quality)
     for(let gIdx = 0; gIdx < 15; gIdx++) {
@@ -1195,9 +1194,10 @@
       
       // Customize LevelUp Menu for Hardcore
       const menu = $('levelup-menu');
+      const targetDisplay = Math.floor(currentMilestoneTarget);
       if (selectedDifficulty === 'hardcore') {
         menu.querySelector('h1').innerText = '⚡ SOBRECARGA HARDCORE ⚡';
-        menu.querySelector('p').innerText = 'Has alcanzado los 4200 puntos. ¡Sistemas al límite!';
+        menu.querySelector('p').innerText = `Has alcanzado los ${targetDisplay} puntos. ¡Sistemas al límite!`;
         // Replace Life button text
         const btns = menu.querySelectorAll('.power-btn');
         if (btns && btns.length > 0) {
@@ -1206,7 +1206,7 @@
         }
       } else {
         menu.querySelector('h1').innerText = '¡PUNTUACIÓN DESTACADA!';
-        menu.querySelector('p').innerText = 'Has alcanzado un hito. Elige una mejora:';
+        menu.querySelector('p').innerText = `Has alcanzado los ${targetDisplay} puntos. Elige una mejora:`;
         const btns = menu.querySelectorAll('.power-btn');
         if (btns && btns.length > 0) {
             btns[btns.length-1].innerHTML = '<h3>❤ +1 Vida Extra</h3><p>Restaura integridad crítica.</p>';
@@ -1877,7 +1877,7 @@
         diffMultiplier = 2.5; 
         spawnRate = 60; 
         player.vida = 1; 
-        currentMilestoneTarget = 4200; 
+        currentMilestoneTarget = 1600; 
         currentUnlockInterval = 1200; 
         unlockedEnemies = 3; 
         break;
