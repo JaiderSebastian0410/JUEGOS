@@ -1199,15 +1199,19 @@
         menu.querySelector('h1').innerText = '⚡ SOBRECARGA HARDCORE ⚡';
         menu.querySelector('p').innerText = 'Has alcanzado los 4200 puntos. ¡Sistemas al límite!';
         // Replace Life button text
-        const btns = menu.querySelectorAll('.btn');
-        btns[btns.length-1].innerText = '⚡ CARGAR ULTRA';
-        btns[btns.length-1].setAttribute('onclick', "choosePremiumPower('ultra')");
+        const btns = menu.querySelectorAll('.power-btn');
+        if (btns && btns.length > 0) {
+            btns[btns.length-1].innerHTML = '<h3>⚡ CARGAR ULTRA</h3><p>Carga y dispara un Flash Nova.</p>';
+            btns[btns.length-1].setAttribute('onclick', "choosePremiumPower('ultra')");
+        }
       } else {
         menu.querySelector('h1').innerText = '¡PUNTUACIÓN DESTACADA!';
-        menu.querySelector('p').innerText = 'Has alcanzado los 1600 puntos. Elige una mejora:';
-        const btns = menu.querySelectorAll('.btn');
-        btns[btns.length-1].innerText = '❤ +1 Vida';
-        btns[btns.length-1].setAttribute('onclick', "choosePremiumPower('life')");
+        menu.querySelector('p').innerText = 'Has alcanzado un hito. Elige una mejora:';
+        const btns = menu.querySelectorAll('.power-btn');
+        if (btns && btns.length > 0) {
+            btns[btns.length-1].innerHTML = '<h3>❤ +1 Vida Extra</h3><p>Restaura integridad crítica.</p>';
+            btns[btns.length-1].setAttribute('onclick', "choosePremiumPower('life')");
+        }
       }
       
       menu.classList.add('active');
