@@ -491,7 +491,11 @@
       p.life -= 0.02;
       p.size *= 0.95;
 
-      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      if (p.life <= 0) {
+        particles[i] = particles[particles.length - 1];
+        particles.pop();
+        continue;
+      }
 
       ctx.globalAlpha = p.life;
       ctx.fillStyle = p.color;
@@ -517,7 +521,11 @@
       const ft = floatingTexts[i];
       ft.y += ft.dy;
       ft.life -= 0.02;
-      if (ft.life <= 0) { floatingTexts.splice(i, 1); continue; }
+      if (ft.life <= 0) {
+        floatingTexts[i] = floatingTexts[floatingTexts.length - 1];
+        floatingTexts.pop();
+        continue; 
+      }
       
       ctx.globalAlpha = ft.life;
       ctx.fillStyle = ft.color;
@@ -1009,8 +1017,9 @@
 
     // Engine Trails (Visual Feedback)
     if (gameState === 'PLAYING' && targetCtx === ctx) {
-      if (frame % 3 === 0) {
-        createParticles(pObj.x - Math.cos(pObj.angle)*15, pObj.y - Math.sin(pObj.angle)*15, pColor, 2);
+      const trailFreq = isMobile ? 8 : 3;
+      if (frame % trailFreq === 0) {
+        createParticles(pObj.x - Math.cos(pObj.angle)*15, pObj.y - Math.sin(pObj.angle)*15, pColor, isMobile ? 1 : 2);
       }
     }
 
@@ -1512,9 +1521,10 @@
 
     ctx.translate(-camera.x, -camera.y);
 
-    // Background — single drawImage call (fast)
+    // Background — draw only the visible viewport (massive performance gain)
     if (bgReady) {
-      ctx.drawImage(bgCanvas, 0, 0);
+      // ctx is translated by -camera.x, -camera.y, so drawing at camera.x appears at 0,0 on screen
+      ctx.drawImage(bgCanvas, camera.x, camera.y, camera.width, camera.height, camera.x, camera.y, camera.width, camera.height);
     }
 
     // World border
