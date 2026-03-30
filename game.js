@@ -519,16 +519,23 @@
       {c: '#9b59b6', a: '#4a235a'}, // Purple
       {c: '#1abc9c', a: '#0e6251'}  // Emerald
     ];
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 20; i++) {
       const x = Math.random() * WORLD.WIDTH;
       const y = Math.random() * WORLD.HEIGHT;
-      const r = Math.random() * 180 + 50; // Some huge planets
+      
+      // Depth logic: 70% far (smaller/faint), 30% closer (medium size)
+      const isFar = Math.random() > 0.3;
+      const r = isFar ? (Math.random() * 25 + 10) : (Math.random() * 40 + 30);
+      const alphaDepth = isFar ? (Math.random() * 0.4 + 0.2) : (Math.random() * 0.3 + 0.7);
+
       const clr = planetColors[Math.floor(Math.random() * planetColors.length)];
       
       bgCtx.save();
       bgCtx.translate(x, y);
       const angleRot = Math.random() * Math.PI;
       bgCtx.rotate(angleRot);
+
+      bgCtx.globalAlpha = alphaDepth; // Simulate atmospheric fog for distant planets
 
       // Planet shadow makes it blend perfectly into deep space
       const pg = bgCtx.createRadialGradient(-r*0.4, -r*0.4, r*0.05, 0, 0, r*1.1);
@@ -543,31 +550,57 @@
 
       // Atmospheric rim light
       bgCtx.strokeStyle = `rgba(255,255,255,0.1)`;
-      bgCtx.lineWidth = Math.max(2, r * 0.05);
+      bgCtx.lineWidth = Math.max(1, r * 0.05);
       bgCtx.stroke();
 
       // Detailed rings (40% probability)
-      // Drawn behind and above realistically by doing full ellipse over the dark planet side
       if (Math.random() > 0.6) {
         bgCtx.rotate(Math.PI/6);
         bgCtx.beginPath();
         bgCtx.ellipse(0, 0, r * 2.3, r * 0.35, 0, 0, Math.PI * 2);
-        bgCtx.lineWidth = r * 0.2;
+        bgCtx.lineWidth = Math.max(1, r * 0.2);
         bgCtx.strokeStyle = `rgba(180, 180, 200, 0.25)`;
         bgCtx.stroke();
         
         // Ring gap line
         bgCtx.beginPath();
         bgCtx.ellipse(0, 0, r * 2.1, r * 0.32, 0, 0, Math.PI * 2);
-        bgCtx.lineWidth = r * 0.02;
+        bgCtx.lineWidth = Math.max(0.5, r * 0.02);
         bgCtx.strokeStyle = `#000000`;
         bgCtx.stroke();
       }
       bgCtx.restore();
     }
+
+    // 4. Distant Miniature Galaxies (Depth Simulation)
+    for(let g = 0; g < 8; g++) {
+      const gx = Math.random() * WORLD.WIDTH;
+      const gy = Math.random() * WORLD.HEIGHT;
+      const gSizeScale = Math.random() * 0.15 + 0.05; // 5% to 20% scale
+      const gAlpha = Math.random() * 0.4 + 0.2; // 0.2 to 0.6 opacity
+      const gAngle = Math.random() * Math.PI * 2;
+      
+      bgCtx.save();
+      bgCtx.translate(gx, gy);
+      bgCtx.rotate(gAngle);
+      bgCtx.scale(gSizeScale, gSizeScale * 0.5); // Elliptical distortion
+      
+      for(let i=0; i<300; i++) {
+          const radius = Math.pow(Math.random(), 2) * 400;
+          const a = (radius * 0.015) + (Math.floor(Math.random() * 2) * Math.PI) + (Math.random()*0.5-0.25);
+          const x = Math.cos(a) * radius;
+          const y = Math.sin(a) * radius;
+          const s = Math.random() * 4 + 1;
+          
+          bgCtx.fillStyle = `rgba(180, 200, 255, ${gAlpha * (1 - radius/400)})`;
+          bgCtx.fillRect(x, y, s, s);
+      }
+      bgCtx.restore();
+    }
+    
     bgReady = true;
 
-    // 4. Parallax Animated Stars & Comets (for frontend)
+    // 5. Parallax Animated Stars & Comets (for frontend)
     for(let i=0; i<200; i++) {
       animatedStars.push({
         x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
@@ -2057,21 +2090,42 @@
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    showInstallBanner();
+    
+    // Show banner immediately, no timeouts
+    const banner = $('install-banner');
+    if (banner) banner.classList.add('visible');
+
+    // Inject manual button in Pause Menu just in case banner is dismissed
+    const pm = document.querySelector('#pause-menu div');
+    if (pm && !$('pause-install-btn')) {
+      const pb = document.createElement('button');
+      pb.id = 'pause-install-btn';
+      pb.className = 'btn';
+      pb.style.background = '#2ecc71';
+      pb.style.color = '#fff';
+      pb.style.marginBottom = '10px';
+      pb.innerHTML = '📲 Instalar Juego Offline';
+      pb.onclick = installApp;
+      // Insert after the first button "Reanudar"
+      if (pm.children[1]) {
+        pm.insertBefore(pb, pm.children[1]);
+      } else {
+        pm.appendChild(pb);
+      }
+    }
   });
 
-  function showInstallBanner() {
-    const banner = $('install-banner');
-    if (!banner) return;
-    setTimeout(() => banner.classList.add('visible'), 1500);
-  }
-
   function installApp() {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      alert("El juego ya está instalado o tu navegador no es compatible.");
+      return;
+    }
     deferredPrompt.prompt();
     deferredPrompt.userChoice.then((result) => {
       if (result.outcome === 'accepted') {
         console.log('[PWA] App installed');
+        const pb = $('pause-install-btn');
+        if (pb) pb.style.display = 'none';
       }
       deferredPrompt = null;
       hideInstallBanner();
