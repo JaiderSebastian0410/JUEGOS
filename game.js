@@ -360,7 +360,6 @@
     }
   });
   document.addEventListener('keyup', (e) => { keys[e.key] = false; keyHoldTimers[e.key] = 0; });
-
   // Mouse: ONLY active while button is held down
   canvas.addEventListener('mousemove', (e) => {
     if (isMobile || gameState !== 'PLAYING' || !isMouseDown) return;
@@ -368,12 +367,15 @@
     mouseY = e.clientY + camera.y;
   });
   canvas.addEventListener('mousedown', (e) => {
-    if (isMobile || gameState !== 'PLAYING') return;
+    if (isMobile || gameState !== 'PLAYING' || e.button !== 0) return; // Only Left Click
     isMouseDown = true;
     mouseX = e.clientX + camera.x;
     mouseY = e.clientY + camera.y;
   });
-  canvas.addEventListener('mouseup', () => { isMouseDown = false; });
+  // Use string events on global window so drag-out doesn't get stuck
+  window.addEventListener('mouseup', () => { isMouseDown = false; });
+  window.addEventListener('mouseleave', () => { isMouseDown = false; });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
 
   function triggerUltra() {
     if (gameState !== 'PLAYING' || ultraEnergy < ULTRA_MAX || player.debuffs.disable > 0) return;
@@ -398,35 +400,36 @@
   // Touch — virtual joystick
   window.addEventListener('touchstart', (e) => {
     isMobile = true;
-    $('mobile-controls').style.display = 'flex';
     if (gameState !== 'PLAYING') return;
-    if (e.target.closest('#mobile-controls')) return;
-    
-    joystickOrigin = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    joystickCurrent = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  }, { passive: false });
-
-  window.addEventListener('touchmove', (e) => {
-    if (gameState !== 'PLAYING' || !joystickOrigin) return;
-    e.preventDefault();
-    if (e.touches.length > 0) {
-      joystickCurrent = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    const touch = e.changedTouches[0];
+    if (touch.clientX < window.innerWidth / 2) {
+      joystickOrigin = { x: touch.clientX, y: touch.clientY };
+      joystickCurrent = { x: touch.clientX, y: touch.clientY };
+      handleUI.style.display = 'block';
+      stickUI.style.display = 'block';
+      updateJoystickUI();
     }
   }, { passive: false });
-
-  window.addEventListener('touchend', (e) => { 
-    if (e.touches.length === 0) {
-      joystickOrigin = null; 
-      joystickCurrent = null;
-    } else if (joystickOrigin) {
-      joystickOrigin = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      joystickCurrent = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  window.addEventListener('touchmove', (e) => {
+    if (joystickOrigin) {
+      const touch = Array.from(e.touches).find(t => t.clientX < window.innerWidth / 2);
+      if (touch) {
+        joystickCurrent = { x: touch.clientX, y: touch.clientY };
+        updateJoystickUI();
+        e.preventDefault();
+      }
+    }
+  }, { passive: false });
+  window.addEventListener('touchend', (e) => {
+    const hasLeftTouch = Array.from(e.touches).some(t => t.clientX < window.innerWidth / 2);
+    if (!hasLeftTouch) {
+      joystickOrigin = null; joystickCurrent = null;
+      handleUI.style.display = 'none'; stickUI.style.display = 'none';
     }
   });
 
-  // Fire button
   const fireBtn = $('fire-btn');
-  fireBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); isFiring = true; }, { passive: false });
+  fireBtn.addEventListener('touchstart', (e) => { e.preventDefault(); isFiring = true; }, { passive: false });
   fireBtn.addEventListener('touchend', () => { isFiring = false; });
 
   // Ultra button
@@ -436,7 +439,7 @@
   }
 
   /* =========================================================
-     PROCEDURAL OPAQUE BACKGROUND + ANIMATED STARS
+     PROCEDURAL EPIC GALAXY BACKGROUND + ANIMATIONS
      ========================================================= */
   const bgCanvas = document.createElement('canvas');
   bgCanvas.width = WORLD.WIDTH;
@@ -447,93 +450,136 @@
   const animatedStars = [];
 
   function initBackground() {
-    bgCtx.fillStyle = '#05050A'; // Deep space void
+    bgCtx.fillStyle = '#05040a'; // Ultra Deep space
     bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
 
-    // 1. Dust clouds / Milky Way bands (Soft, opaque gradients)
-    const nebulas = [
-      {r: 35, g:45, b:85},   // Muted blue
-      {r: 55, g:25, b:65},   // Muted purple
-      {r: 20, g:60, b:70},   // Muted teal
-      {r: 40, g:30, b:45}    // Dark violet
-    ];
-    for (let i = 0; i < 40; i++) {
-      const c = nebulas[Math.floor(Math.random() * nebulas.length)];
-      const x = Math.random() * WORLD.WIDTH;
-      const y = Math.random() * WORLD.HEIGHT;
-      const r = Math.random() * 800 + 300;
-      
-      const g = bgCtx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, `rgba(${c.r},${c.g},${c.b},0.15)`);
-      g.addColorStop(0.5, `rgba(${c.r},${c.g},${c.b},0.05)`);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      bgCtx.fillStyle = g;
-      bgCtx.fillRect(x - r, y - r, r * 2, r * 2);
+    const cx = WORLD.WIDTH / 2;
+    const cy = WORLD.HEIGHT / 2;
+
+    // 1. Epic Galaxy Spiral
+    const arms = 3;
+    const spiralSpread = 400; // How thick the arms are
+    
+    for (let i = 0; i < 4000; i++) {
+        // Logarithmic spiral distribution
+        const radius = Math.pow(Math.random(), 1.5) * 2000;
+        const baseAngle = (radius * 0.003) + (Math.floor(Math.random() * arms) * (Math.PI * 2 / arms));
+        const angleSpread = (1 - (radius/2000)) * (Math.random() * 1.5 - 0.75); // Wider at center, tighter at edges
+        const angle = baseAngle + angleSpread;
+        
+        const x = cx + Math.cos(angle) * radius;
+        const y = cy + Math.sin(angle) * radius;
+        
+        // Colors from center (white/blue) to edges (purple/pink)
+        const distanceFactor = radius / 2000;
+        const size = Math.random() * 80 + 20;
+        const alpha = Math.max(0, 0.25 - distanceFactor * 0.2);
+        
+        const g = bgCtx.createRadialGradient(x, y, 0, x, y, size);
+        if (distanceFactor < 0.2) {
+            g.addColorStop(0, `rgba(200, 230, 255, ${alpha*1.5})`); // Bright core
+        } else if (distanceFactor < 0.6) {
+            g.addColorStop(0, `rgba(70, 40, 160, ${alpha})`); // Deep blues/purples
+        } else {
+            g.addColorStop(0, `rgba(140, 20, 90, ${alpha})`); // Dark magenta edges
+        }
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        
+        bgCtx.fillStyle = g;
+        bgCtx.fillRect(x - size, y - size, size * 2, size * 2);
     }
     
-    // 2. High-res Distant Stars (8,000 stars, zero runtime cost)
-    for(let i=0; i<8000; i++) {
-      const alpha = Math.random() * 0.4 + 0.1;
-      const size = Math.random() > 0.9 ? 2 : 1;
-      bgCtx.fillStyle = `rgba(255,255,255,${alpha})`;
+    // Core Glow
+    const coreGlow = bgCtx.createRadialGradient(cx, cy, 0, cx, cy, 800);
+    coreGlow.addColorStop(0, 'rgba(255,255,255,0.4)');
+    coreGlow.addColorStop(0.2, 'rgba(100,200,255,0.15)');
+    coreGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    bgCtx.fillStyle = coreGlow;
+    bgCtx.fillRect(cx - 800, cy - 800, 1600, 1600);
+
+    // 2. High-res Distant Stars (10,000 tiny stars)
+    for(let i=0; i<10000; i++) {
+      const alpha = Math.random() * 0.5 + 0.1;
+      const size = Math.random() > 0.95 ? 2.5 : 1;
+      
+      // Some stars get a slight color instead of pure white
+      let r=255, g=255, b=255;
+      const roll = Math.random();
+      if(roll < 0.2) { r=150; g=200; b=255; } else if (roll < 0.4) { r=255; g=200; b=150; }
+      
+      bgCtx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
       bgCtx.fillRect(Math.random()*WORLD.WIDTH, Math.random()*WORLD.HEIGHT, size, size);
     }
 
-    // 3. Cinematic Planets (Pre-rendered)
+    // 3. Cinematic Planets (Rich details & rings without taking performance during gameplay)
     const planetColors = [
-      {c: '#556677', a: '#223344'}, {c: '#885544', a: '#442211'}, {c: '#447766', a: '#113322'}, {c: '#774466', a: '#331122'}
+      {c: '#3498db', a: '#2c3e50'}, // Blue
+      {c: '#e74c3c', a: '#641e16'}, // Red
+      {c: '#f1c40f', a: '#7d6608'}, // Yellow/Gold
+      {c: '#9b59b6', a: '#4a235a'}, // Purple
+      {c: '#1abc9c', a: '#0e6251'}  // Emerald
     ];
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 15; i++) {
       const x = Math.random() * WORLD.WIDTH;
       const y = Math.random() * WORLD.HEIGHT;
-      const r = Math.random() * 150 + 40;
+      const r = Math.random() * 180 + 50; // Some huge planets
       const clr = planetColors[Math.floor(Math.random() * planetColors.length)];
       
       bgCtx.save();
       bgCtx.translate(x, y);
-      bgCtx.rotate(Math.random() * Math.PI);
+      const angleRot = Math.random() * Math.PI;
+      bgCtx.rotate(angleRot);
 
-      // Planet Shadow/Light
-      const pg = bgCtx.createRadialGradient(-r*0.3, -r*0.3, r*0.1, 0, 0, r);
+      // Planet shadow makes it blend perfectly into deep space
+      const pg = bgCtx.createRadialGradient(-r*0.4, -r*0.4, r*0.05, 0, 0, r*1.1);
       pg.addColorStop(0, clr.c);
-      pg.addColorStop(0.7, clr.a);
-      pg.addColorStop(1, '#000000');
+      pg.addColorStop(0.6, clr.a);
+      pg.addColorStop(0.9, '#000000');
       
       bgCtx.beginPath();
       bgCtx.arc(0, 0, r, 0, Math.PI * 2);
       bgCtx.fillStyle = pg;
       bgCtx.fill();
 
-      // Atmospheric glow
-      bgCtx.strokeStyle = `rgba(255,255,255,0.08)`;
-      bgCtx.lineWidth = 2;
+      // Atmospheric rim light
+      bgCtx.strokeStyle = `rgba(255,255,255,0.1)`;
+      bgCtx.lineWidth = Math.max(2, r * 0.05);
       bgCtx.stroke();
 
-      // Rings (50% probability)
-      if (Math.random() > 0.5) {
+      // Detailed rings (40% probability)
+      // Drawn behind and above realistically by doing full ellipse over the dark planet side
+      if (Math.random() > 0.6) {
+        bgCtx.rotate(Math.PI/6);
         bgCtx.beginPath();
-        bgCtx.ellipse(0, 0, r * 2.2, r * 0.4, 0, 0, Math.PI * 2);
-        bgCtx.lineWidth = r * 0.15;
-        bgCtx.strokeStyle = `rgba(200, 200, 220, 0.15)`;
+        bgCtx.ellipse(0, 0, r * 2.3, r * 0.35, 0, 0, Math.PI * 2);
+        bgCtx.lineWidth = r * 0.2;
+        bgCtx.strokeStyle = `rgba(180, 180, 200, 0.25)`;
+        bgCtx.stroke();
+        
+        // Ring gap line
+        bgCtx.beginPath();
+        bgCtx.ellipse(0, 0, r * 2.1, r * 0.32, 0, 0, Math.PI * 2);
+        bgCtx.lineWidth = r * 0.02;
+        bgCtx.strokeStyle = `#000000`;
         bgCtx.stroke();
       }
       bgCtx.restore();
     }
     bgReady = true;
 
-    // 4. Parallax Animated Stars & Comets
-    for(let i=0; i<150; i++) {
+    // 4. Parallax Animated Stars & Comets (for frontend)
+    for(let i=0; i<200; i++) {
       animatedStars.push({
         x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-        size: Math.random() * 2 + 1, speed: Math.random() * 0.6 + 0.1,
+        size: Math.random() * 2 + 1, speed: Math.random() * 0.5 + 0.1,
         alpha: Math.random() * 0.8 + 0.2, type: 'star'
       });
     }
-    for(let i=0; i<8; i++) {
+    for(let i=0; i<12; i++) {
       animatedStars.push({
         x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-        speed: Math.random() * 4 + 2, angle: Math.random() * 0.4 + 0.2,
-        length: Math.random() * 60 + 30, alpha: Math.random() * 0.4 + 0.1, type: 'comet'
+        speed: Math.random() * 3 + 2.5, angle: Math.random() * 0.5 + 0.1,
+        length: Math.random() * 80 + 40, alpha: Math.random() * 0.5 + 0.2, type: 'comet'
       });
     }
   }
