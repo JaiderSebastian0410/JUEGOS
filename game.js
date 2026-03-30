@@ -456,32 +456,28 @@
     const cx = WORLD.WIDTH / 2;
     const cy = WORLD.HEIGHT / 2;
 
-    // 1. Epic Galaxy Spiral
+    // 1. Epic Galaxy Spiral (Central Core)
     const arms = 3;
-    const spiralSpread = 400; // How thick the arms are
-    
     for (let i = 0; i < 4000; i++) {
-        // Logarithmic spiral distribution
         const radius = Math.pow(Math.random(), 1.5) * 2000;
         const baseAngle = (radius * 0.003) + (Math.floor(Math.random() * arms) * (Math.PI * 2 / arms));
-        const angleSpread = (1 - (radius/2000)) * (Math.random() * 1.5 - 0.75); // Wider at center, tighter at edges
+        const angleSpread = (1 - (radius/2000)) * (Math.random() * 1.5 - 0.75);
         const angle = baseAngle + angleSpread;
         
         const x = cx + Math.cos(angle) * radius;
         const y = cy + Math.sin(angle) * radius;
         
-        // Colors from center (white/blue) to edges (purple/pink)
         const distanceFactor = radius / 2000;
         const size = Math.random() * 80 + 20;
-        const alpha = Math.max(0, 0.25 - distanceFactor * 0.2);
+        const alpha = Math.max(0, 0.15 - distanceFactor * 0.1);
         
         const g = bgCtx.createRadialGradient(x, y, 0, x, y, size);
         if (distanceFactor < 0.2) {
-            g.addColorStop(0, `rgba(200, 230, 255, ${alpha*1.5})`); // Bright core
+            g.addColorStop(0, `rgba(200, 230, 255, ${alpha*1.5})`);
         } else if (distanceFactor < 0.6) {
-            g.addColorStop(0, `rgba(70, 40, 160, ${alpha})`); // Deep blues/purples
+            g.addColorStop(0, `rgba(70, 40, 160, ${alpha})`);
         } else {
-            g.addColorStop(0, `rgba(140, 20, 90, ${alpha})`); // Dark magenta edges
+            g.addColorStop(0, `rgba(140, 20, 90, ${alpha})`);
         }
         g.addColorStop(1, 'rgba(0,0,0,0)');
         
@@ -491,18 +487,58 @@
     
     // Core Glow
     const coreGlow = bgCtx.createRadialGradient(cx, cy, 0, cx, cy, 800);
-    coreGlow.addColorStop(0, 'rgba(255,255,255,0.4)');
-    coreGlow.addColorStop(0.2, 'rgba(100,200,255,0.15)');
+    coreGlow.addColorStop(0, 'rgba(255,255,255,0.2)');
+    coreGlow.addColorStop(0.2, 'rgba(100,200,255,0.1)');
     coreGlow.addColorStop(1, 'rgba(0,0,0,0)');
     bgCtx.fillStyle = coreGlow;
     bgCtx.fillRect(cx - 800, cy - 800, 1600, 1600);
 
-    // 2. High-res Distant Stars (10,000 tiny stars)
+    // 2. Distant Miniature Galaxies (Reference Quality)
+    for(let gIdx = 0; gIdx < 15; gIdx++) {
+      const gx = Math.random() * WORLD.WIDTH;
+      const gy = Math.random() * WORLD.HEIGHT;
+      const gSizeScale = Math.random() * 0.3 + 0.1; // Varied scales
+      const gAlpha = Math.random() * 0.5 + 0.2;
+      const gAngle = Math.random() * Math.PI * 2;
+      const type = Math.random() > 0.5 ? 'spiral' : 'irregular';
+      
+      bgCtx.save();
+      bgCtx.translate(gx, gy);
+      bgCtx.rotate(gAngle);
+      bgCtx.scale(gSizeScale, gSizeScale * (Math.random() * 0.6 + 0.2)); // Dynamic flattening
+      
+      const gRadius = 600;
+      // Core
+      const gCore = bgCtx.createRadialGradient(0, 0, 0, 0, 0, gRadius * 0.2);
+      gCore.addColorStop(0, `rgba(255, 240, 220, ${gAlpha})`);
+      gCore.addColorStop(1, 'rgba(0,0,0,0)');
+      bgCtx.fillStyle = gCore;
+      bgCtx.fillRect(-gRadius, -gRadius, gRadius*2, gRadius*2);
+
+      // Dust lanes & Stars
+      const gArms = type === 'spiral' ? (Math.random() > 0.5 ? 2 : 4) : 1;
+      const baseR = type === 'spiral' ? 100 : 255;
+      const baseB = type === 'spiral' ? 255 : 150;
+      for(let i=0; i<800; i++) {
+          const radius = Math.pow(Math.random(), 1.5) * gRadius;
+          const a = type === 'spiral' 
+            ? (radius * 0.015) + (Math.floor(Math.random() * gArms) * (Math.PI * 2 / gArms)) + (Math.random()*0.8-0.4)
+            : Math.random() * Math.PI * 2;
+          const x = Math.cos(a) * radius;
+          const y = Math.sin(a) * radius;
+          const s = Math.random() * 5 + 1;
+          
+          bgCtx.fillStyle = `rgba(${baseR}, 180, ${baseB}, ${gAlpha * (1 - radius/gRadius)})`;
+          bgCtx.fillRect(x, y, s, s);
+      }
+      bgCtx.restore();
+    }
+
+    // 3. High-res Distant Stars (10,000 tiny stars)
     for(let i=0; i<10000; i++) {
       const alpha = Math.random() * 0.5 + 0.1;
       const size = Math.random() > 0.95 ? 2.5 : 1;
       
-      // Some stars get a slight color instead of pure white
       let r=255, g=255, b=255;
       const roll = Math.random();
       if(roll < 0.2) { r=150; g=200; b=255; } else if (roll < 0.4) { r=255; g=200; b=150; }
@@ -510,97 +546,92 @@
       bgCtx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
       bgCtx.fillRect(Math.random()*WORLD.WIDTH, Math.random()*WORLD.HEIGHT, size, size);
     }
+    
+    // 4. Bright Outstanding Stars (with Cross Flares)
+    for(let i=0; i<30; i++) {
+        const x = Math.random() * WORLD.WIDTH;
+        const y = Math.random() * WORLD.HEIGHT;
+        const r = Math.random() * 2 + 1;
+        
+        const glow = bgCtx.createRadialGradient(x, y, 0, x, y, r * 6);
+        glow.addColorStop(0, 'rgba(255,255,255,0.9)');
+        glow.addColorStop(0.2, 'rgba(150,220,255,0.4)');
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        bgCtx.fillStyle = glow;
+        bgCtx.beginPath(); bgCtx.arc(x,y,r*6, 0, Math.PI*2); bgCtx.fill();
+        
+        bgCtx.fillStyle = 'rgba(255,255,255,0.5)';
+        bgCtx.fillRect(x - r*4, y - 0.5, r*8, 1);
+        bgCtx.fillRect(x - 0.5, y - r*4, 1, r*8);
+        bgCtx.fillStyle = '#fff';
+        bgCtx.beginPath(); bgCtx.arc(x, y, r*0.5, 0, Math.PI*2); bgCtx.fill();
+    }
 
-    // 3. Cinematic Planets (Rich details & rings without taking performance during gameplay)
+    // 5. Cinematic Planets (Much smaller, far away, and sparse to not overlap unnaturally)
     const planetColors = [
-      {c: '#3498db', a: '#2c3e50'}, // Blue
-      {c: '#e74c3c', a: '#641e16'}, // Red
-      {c: '#f1c40f', a: '#7d6608'}, // Yellow/Gold
-      {c: '#9b59b6', a: '#4a235a'}, // Purple
-      {c: '#1abc9c', a: '#0e6251'}  // Emerald
+      {c: '#3498db', a: '#1f2e3d'}, // Deep Blue
+      {c: '#e74c3c', a: '#4a1511'}, // Deep Red
+      {c: '#f1c40f', a: '#5a4a06'}, // Yellow/Gold
+      {c: '#9b59b6', a: '#3c1d47'}, // Purple
+      {c: '#1abc9c', a: '#0a4237'}  // Emerald
     ];
-    for (let i = 0; i < 20; i++) {
-      const x = Math.random() * WORLD.WIDTH;
-      const y = Math.random() * WORLD.HEIGHT;
+    
+    const planetPositions = [];
+    outerPlanetLoop: for (let i = 0; i < 25; i++) {
+      let x, y;
+      let collisionRetries = 0;
+      // Ensure planets are extremely separated
+      do {
+         x = Math.random() * WORLD.WIDTH;
+         y = Math.random() * WORLD.HEIGHT;
+         collisionRetries++;
+         if (collisionRetries > 100) continue outerPlanetLoop; // Give up on this planet to avoid infinite loops
+      } while (planetPositions.some(p => Math.hypot(p.x - x, p.y - y) < 800));
       
-      // Depth logic: 70% far (smaller/faint), 30% closer (medium size)
-      const isFar = Math.random() > 0.3;
-      const r = isFar ? (Math.random() * 25 + 10) : (Math.random() * 40 + 30);
-      const alphaDepth = isFar ? (Math.random() * 0.4 + 0.2) : (Math.random() * 0.3 + 0.7);
+      planetPositions.push({x, y});
+      
+      // Depth logic: Make them very small, max radius is 30, blending into the dark background
+      const r = Math.random() * 20 + 8; // Tiny, distant planets
+      const alphaDepth = Math.random() * 0.4 + 0.3; // 0.3 to 0.7 opacity max
 
       const clr = planetColors[Math.floor(Math.random() * planetColors.length)];
       
       bgCtx.save();
       bgCtx.translate(x, y);
-      const angleRot = Math.random() * Math.PI;
-      bgCtx.rotate(angleRot);
+      bgCtx.rotate(Math.random() * Math.PI);
+      bgCtx.globalAlpha = alphaDepth; 
 
-      bgCtx.globalAlpha = alphaDepth; // Simulate atmospheric fog for distant planets
-
-      // Planet shadow makes it blend perfectly into deep space
-      const pg = bgCtx.createRadialGradient(-r*0.4, -r*0.4, r*0.05, 0, 0, r*1.1);
+      const pg = bgCtx.createRadialGradient(-r*0.3, -r*0.3, 0, 0, 0, r);
       pg.addColorStop(0, clr.c);
-      pg.addColorStop(0.6, clr.a);
-      pg.addColorStop(0.9, '#000000');
+      pg.addColorStop(0.7, clr.a);
+      pg.addColorStop(1, '#020205');
       
       bgCtx.beginPath();
       bgCtx.arc(0, 0, r, 0, Math.PI * 2);
       bgCtx.fillStyle = pg;
       bgCtx.fill();
 
-      // Atmospheric rim light
-      bgCtx.strokeStyle = `rgba(255,255,255,0.1)`;
-      bgCtx.lineWidth = Math.max(1, r * 0.05);
-      bgCtx.stroke();
-
-      // Detailed rings (40% probability)
-      if (Math.random() > 0.6) {
+      // Delicate Rings
+      if (Math.random() > 0.7) {
         bgCtx.rotate(Math.PI/6);
         bgCtx.beginPath();
-        bgCtx.ellipse(0, 0, r * 2.3, r * 0.35, 0, 0, Math.PI * 2);
-        bgCtx.lineWidth = Math.max(1, r * 0.2);
-        bgCtx.strokeStyle = `rgba(180, 180, 200, 0.25)`;
+        bgCtx.ellipse(0, 0, r * 2.5, r * 0.25, 0, 0, Math.PI * 2);
+        bgCtx.lineWidth = Math.max(0.5, r * 0.15);
+        bgCtx.strokeStyle = `rgba(200, 200, 255, 0.3)`;
         bgCtx.stroke();
         
-        // Ring gap line
         bgCtx.beginPath();
-        bgCtx.ellipse(0, 0, r * 2.1, r * 0.32, 0, 0, Math.PI * 2);
-        bgCtx.lineWidth = Math.max(0.5, r * 0.02);
+        bgCtx.ellipse(0, 0, r * 2.2, r * 0.22, 0, 0, Math.PI * 2);
+        bgCtx.lineWidth = Math.max(0.2, r * 0.05);
         bgCtx.strokeStyle = `#000000`;
         bgCtx.stroke();
-      }
-      bgCtx.restore();
-    }
-
-    // 4. Distant Miniature Galaxies (Depth Simulation)
-    for(let g = 0; g < 8; g++) {
-      const gx = Math.random() * WORLD.WIDTH;
-      const gy = Math.random() * WORLD.HEIGHT;
-      const gSizeScale = Math.random() * 0.15 + 0.05; // 5% to 20% scale
-      const gAlpha = Math.random() * 0.4 + 0.2; // 0.2 to 0.6 opacity
-      const gAngle = Math.random() * Math.PI * 2;
-      
-      bgCtx.save();
-      bgCtx.translate(gx, gy);
-      bgCtx.rotate(gAngle);
-      bgCtx.scale(gSizeScale, gSizeScale * 0.5); // Elliptical distortion
-      
-      for(let i=0; i<300; i++) {
-          const radius = Math.pow(Math.random(), 2) * 400;
-          const a = (radius * 0.015) + (Math.floor(Math.random() * 2) * Math.PI) + (Math.random()*0.5-0.25);
-          const x = Math.cos(a) * radius;
-          const y = Math.sin(a) * radius;
-          const s = Math.random() * 4 + 1;
-          
-          bgCtx.fillStyle = `rgba(180, 200, 255, ${gAlpha * (1 - radius/400)})`;
-          bgCtx.fillRect(x, y, s, s);
       }
       bgCtx.restore();
     }
     
     bgReady = true;
 
-    // 5. Parallax Animated Stars & Comets (for frontend)
+    // 6. Parallax Animated Stars & Elaborate Comets
     for(let i=0; i<200; i++) {
       animatedStars.push({
         x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
@@ -609,10 +640,12 @@
       });
     }
     for(let i=0; i<12; i++) {
+       // Elaborate falling asteroids/comets
       animatedStars.push({
         x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-        speed: Math.random() * 3 + 2.5, angle: Math.random() * 0.5 + 0.1,
-        length: Math.random() * 80 + 40, alpha: Math.random() * 0.5 + 0.2, type: 'comet'
+        speed: Math.random() * 4 + 3, angle: Math.random() * 0.4 + 0.2,
+        length: Math.random() * 120 + 60, alpha: Math.random() * 0.6 + 0.3, 
+        thickness: Math.random() * 2 + 1.5, type: 'comet'
       });
     }
   }
@@ -636,23 +669,41 @@
       if (s.type === 'comet') {
         s.x += Math.cos(s.angle) * s.speed;
         s.y += Math.sin(s.angle) * s.speed;
-        if (s.x > WORLD.WIDTH + 100) { s.x = -100; s.y = Math.random() * WORLD.HEIGHT; }
-        if (s.y > WORLD.HEIGHT + 100) { s.y = -100; s.x = Math.random() * WORLD.WIDTH; }
+        if (s.x > WORLD.WIDTH + 200) { s.x = -200; s.y = Math.random() * WORLD.HEIGHT; }
+        if (s.y > WORLD.HEIGHT + 200) { s.y = -200; s.x = Math.random() * WORLD.WIDTH; }
         
         const cx = s.x - camera.x * 0.3;
         const cy = s.y - camera.y * 0.3;
         
-        if (cx > -s.length && cx < camera.width + s.length && cy > -s.length && cy < camera.height + s.length) {
+        if (cx > -s.length - 20 && cx < camera.width + s.length + 20 && cy > -s.length - 20 && cy < camera.height + s.length + 20) {
           ctx.save();
           ctx.globalAlpha = s.alpha;
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
+          
+          // Realistic flaming trail
+          const grad = ctx.createLinearGradient(
+             camera.x + cx, camera.y + cy, 
+             camera.x + cx - Math.cos(s.angle) * s.length, camera.y + cy - Math.sin(s.angle) * s.length
+          );
+          grad.addColorStop(0, 'rgba(255, 220, 150, 1)');
+          grad.addColorStop(0.3, 'rgba(255, 100, 50, 0.5)');
+          grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = s.thickness;
+          ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.moveTo(camera.x + cx, camera.y + cy);
           ctx.lineTo(camera.x + cx - Math.cos(s.angle) * s.length, camera.y + cy - Math.sin(s.angle) * s.length);
           ctx.stroke();
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath(); ctx.arc(camera.x + cx, camera.y + cy, 1.5, 0, Math.PI * 2); ctx.fill();
+          
+          // Asteroid Rock Head with glow
+          ctx.fillStyle = '#ffeedd';
+          ctx.shadowColor = '#ff6600';
+          ctx.shadowBlur = 15;
+          ctx.beginPath();
+          ctx.arc(camera.x + cx, camera.y + cy, s.thickness * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          
           ctx.restore();
         }
       } else {
