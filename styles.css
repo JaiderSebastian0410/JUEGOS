@@ -371,7 +371,7 @@ canvas { display: block; }
 /* ---- PWA Install Banner ---- */
 #install-banner {
   position: fixed;
-  bottom: -120px;
+  top: -120px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
@@ -386,12 +386,12 @@ canvas { display: block; }
   gap: 16px;
   max-width: 420px;
   width: calc(100% - 32px);
-  box-shadow: 0 -4px 30px rgba(0, 255, 255, 0.15), 0 0 60px rgba(0, 0, 0, 0.5);
-  transition: bottom 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 30px rgba(0, 255, 255, 0.15), 0 0 60px rgba(0, 0, 0, 0.5);
+  transition: top 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 #install-banner.visible {
-  bottom: 16px;
+  top: 16px;
 }
 
 #install-banner img {
