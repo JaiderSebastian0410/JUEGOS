@@ -943,8 +943,8 @@
       if (roll < cumulative) { selectedType = ENEMY_TYPES[i]; break; }
     }
 
-    // Original speed scaling adjusted by difficulty multiplier. Ensure baseSpeed never exceeds player boost speed (6)
-    const baseSpeed = Math.min((selectedType.speed + score * 0.0001) * diffMultiplierSpeed, PLAYER_BOOST_SPEED);
+    // Original speed scaling adjusted by difficulty multiplier. Ensure baseSpeed never exceeds player base speed (3.5)
+    const baseSpeed = Math.min((selectedType.speed + score * 0.0001) * diffMultiplierSpeed, PLAYER_BASE_SPEED);
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.max(camera.width, camera.height) * 0.6;
     const spawnX = clamp(player.x + Math.cos(angle) * dist, 100, WORLD.WIDTH - 100);
