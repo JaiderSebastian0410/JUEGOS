@@ -246,6 +246,7 @@
   let isPractice = false;
   let diffMultiplier = 1.0;
   let diffMultiplierSpeed = 1.0;
+  let spawnWeightFactor = 0.65;
   let floatingTexts = [];
   
   let shakeAmt = 0;
@@ -930,9 +931,13 @@
       showAnnouncement('NUEVA AMENAZA: ' + ENEMY_TYPES[unlockedEnemies - 1].name.toUpperCase());
     }
 
-    // Weighted spawning: harder enemies are rarer
+    // PERFORMANCE: Limit total enemies on screen to prevent lag
+    const maxEnemies = isMobile ? 35 : 60;
+    if (enemies.length >= maxEnemies) return;
+
+    // Weighted spawning: harder enemies are rarer but difficulty increases their frequency
     const pool = ENEMY_TYPES.slice(0, unlockedEnemies);
-    const weights = pool.map((_, i) => Math.pow(0.65, i));
+    const weights = pool.map((_, i) => Math.pow(spawnWeightFactor, i));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     const roll = Math.random() * totalWeight;
 
@@ -966,10 +971,15 @@
      ========================================================= */
   function updateEnemies() {
     const alive = [];
+    const maxDistSq = 2500 * 2500; // Cull enemies too far away to prevent ghost accumulation lag
+
     for (const e of enemies) {
       const dx = player.x - e.x;
       const dy = player.y - e.y;
       const distSq = dx * dx + dy * dy;
+
+      // Distance culling
+      if (distSq > maxDistSq) continue;
 
       const d = Math.sqrt(distSq);
       if (d > 1) {
@@ -1870,23 +1880,33 @@
     currentMilestoneTarget = 1600;
     currentUnlockInterval = 700;
     unlockedEnemies = 1;
-    spawnRate = 120;
-
+    let diffMultiplierSpeed = 1.0;
     switch(diff) {
-      case 'practica': diffMultiplier = 0.2; diffMultiplierSpeed = 1.0; spawnRate = 140; player.vida = 999; break;
-      case 'facil': diffMultiplier = 0.5; diffMultiplierSpeed = 0.8; spawnRate = 140; player.vida = 5; break;
-      case 'medio': diffMultiplier = 1.0; diffMultiplierSpeed = 1.2; spawnRate = 100; player.vida = 5; break;
-      case 'dificil': diffMultiplier = 1.5; diffMultiplierSpeed = 1.4; spawnRate = 80; player.vida = 4; break;
+      case 'practica': 
+        diffMultiplier = 0.2; diffMultiplierSpeed = 1.0; spawnWeightFactor = 0.4; 
+        spawnRate = 180; player.vida = 999; break;
+      case 'facil': 
+        diffMultiplier = 0.5; diffMultiplierSpeed = 0.8; spawnWeightFactor = 0.55; 
+        spawnRate = 150; player.vida = 5; break;
+      case 'medio': 
+        diffMultiplier = 1.0; diffMultiplierSpeed = 1.2; spawnWeightFactor = 0.7; 
+        spawnRate = 100; player.vida = 5; break;
+      case 'dificil': 
+        diffMultiplier = 1.5; diffMultiplierSpeed = 1.4; spawnWeightFactor = 0.85; 
+        spawnRate = 70; player.vida = 4; break;
       case 'hardcore': 
         diffMultiplier = 2.5; 
         diffMultiplierSpeed = 1.8;
-        spawnRate = 60; 
+        spawnWeightFactor = 0.95;
+        spawnRate = 45; 
         player.vida = 1; 
         currentMilestoneTarget = 4200; 
         currentUnlockInterval = 1200; 
         unlockedEnemies = 3; 
         break;
-      case 'progresivo': diffMultiplier = 1.0; diffMultiplierSpeed = 1.1; spawnRate = 120; player.vida = 5; break;
+      case 'progresivo': 
+        diffMultiplier = 1.0; diffMultiplierSpeed = 1.1; spawnWeightFactor = 0.72; 
+        spawnRate = 120; player.vida = 5; break;
     }
   };
 
