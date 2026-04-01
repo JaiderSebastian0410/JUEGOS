@@ -245,6 +245,7 @@
   let selectedDifficulty = 'progresivo';
   let isPractice = false;
   let diffMultiplier = 1.0;
+  let diffMultiplierSpeed = 1.0;
   let floatingTexts = [];
   
   let shakeAmt = 0;
@@ -824,8 +825,8 @@
   function handleShooting() {
     if (player.debuffs.disable > 0) return;
 
-    // Manual cannon (Space, mobile fire, OR mouse click)
-    if ((keys[' '] || isFiring || isMouseDown) && player.powers.manual > 0) {
+    // Manual cannon (Space OR mobile fire) - Mouse click now only rotates
+    if ((keys[' '] || isFiring) && player.powers.manual > 0) {
       if (player.debuffs.powerlock <= 0) {
         player.powers.manual--;
         if (frame % 8 === 0) { shoot(16, '#e67e22', 'manual'); SFX.shootManual(); }
@@ -942,8 +943,8 @@
       if (roll < cumulative) { selectedType = ENEMY_TYPES[i]; break; }
     }
 
-    // Original speed scaling. Ensure baseSpeed never exceeds player base speed (6)
-    const baseSpeed = Math.min(selectedType.speed + score * 0.0001, PLAYER_BASE_SPEED);
+    // Original speed scaling adjusted by difficulty multiplier. Ensure baseSpeed never exceeds player boost speed (6)
+    const baseSpeed = Math.min((selectedType.speed + score * 0.0001) * diffMultiplierSpeed, PLAYER_BOOST_SPEED);
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.max(camera.width, camera.height) * 0.6;
     const spawnX = clamp(player.x + Math.cos(angle) * dist, 100, WORLD.WIDTH - 100);
@@ -1008,7 +1009,7 @@
                 // Enemy projectile hits: just standard slow/disable
                 const roll = Math.random();
                 const type = roll < 0.5 ? 'slow' : 'disable';
-                player.debuffs[type] = 180;
+                player.debuffs[type] = 300; // Increased to 5 seconds
                 showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
                 SFX.hit();
               }
@@ -1872,19 +1873,20 @@
     spawnRate = 120;
 
     switch(diff) {
-      case 'practica': diffMultiplier = 0.2; spawnRate = 140; player.vida = 999; break;
-      case 'facil': diffMultiplier = 0.5; spawnRate = 150; player.vida = 5; break;
-      case 'medio': diffMultiplier = 1.0; spawnRate = 100; player.vida = 5; break;
-      case 'dificil': diffMultiplier = 1.5; spawnRate = 80; player.vida = 4; break;
+      case 'practica': diffMultiplier = 0.2; diffMultiplierSpeed = 1.0; spawnRate = 140; player.vida = 999; break;
+      case 'facil': diffMultiplier = 0.5; diffMultiplierSpeed = 0.8; spawnRate = 140; player.vida = 5; break;
+      case 'medio': diffMultiplier = 1.0; diffMultiplierSpeed = 1.2; spawnRate = 100; player.vida = 5; break;
+      case 'dificil': diffMultiplier = 1.5; diffMultiplierSpeed = 1.4; spawnRate = 80; player.vida = 4; break;
       case 'hardcore': 
         diffMultiplier = 2.5; 
+        diffMultiplierSpeed = 1.8;
         spawnRate = 60; 
         player.vida = 1; 
         currentMilestoneTarget = 4200; 
         currentUnlockInterval = 1200; 
         unlockedEnemies = 3; 
         break;
-      case 'progresivo': diffMultiplier = 1.0; spawnRate = 120; player.vida = 5; break;
+      case 'progresivo': diffMultiplier = 1.0; diffMultiplierSpeed = 1.1; spawnRate = 120; player.vida = 5; break;
     }
   };
 
