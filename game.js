@@ -14,7 +14,7 @@
   const STAR_COUNT = 300;
   const POWER_DURATION = 480;       // frames (~8 seconds at 60fps)
   const PREMIUM_DURATION = 1500;    // frames (~25 seconds)
-  const KILLS_PER_LIFE = 70;
+  let killsPerLife = 70;
   const SCORE_PER_MILESTONE = 1600;
   const ENEMY_UNLOCK_INTERVAL = 700;
 
@@ -1245,8 +1245,8 @@
      MILESTONES
      ========================================================= */
   function checkMilestones() {
-    if (killsMilestone >= KILLS_PER_LIFE) {
-      killsMilestone -= KILLS_PER_LIFE;
+    if (killsMilestone >= killsPerLife) {
+      killsMilestone -= killsPerLife;
       if (!isPractice) player.vida++;
       createParticles(player.x, player.y, '#ff007f', 40);
       createFloatingText(player.x, player.y, "❤ EXTRA!", "#ff007f");
@@ -1950,19 +1950,21 @@
     currentUnlockInterval = 700;
     unlockedEnemies = 1;
     let diffMultiplierSpeed = 1.0;
+    killsPerLife = 70; // Reset default
+
     switch(diff) {
       case 'practica': 
         diffMultiplier = 0.2; diffMultiplierSpeed = 1.0; spawnWeightFactor = 0.4; 
-        spawnRate = 180; player.vida = 999; break;
+        spawnRate = 180; player.vida = 999; killsPerLife = 70; break;
       case 'facil': 
         diffMultiplier = 0.5; diffMultiplierSpeed = 0.8; spawnWeightFactor = 0.55; 
-        spawnRate = 150; player.vida = 5; break;
+        spawnRate = 150; player.vida = 5; killsPerLife = 70; break;
       case 'medio': 
         diffMultiplier = 1.0; diffMultiplierSpeed = 1.2; spawnWeightFactor = 0.7; 
-        spawnRate = 100; player.vida = 5; break;
+        spawnRate = 100; player.vida = 5; killsPerLife = 90; break;
       case 'dificil': 
         diffMultiplier = 1.5; diffMultiplierSpeed = 1.4; spawnWeightFactor = 0.85; 
-        spawnRate = 70; player.vida = 4; break;
+        spawnRate = 70; player.vida = 4; killsPerLife = 110; break;
       case 'hardcore': 
         diffMultiplier = 2.5; 
         diffMultiplierSpeed = 1.8;
@@ -1972,10 +1974,11 @@
         currentMilestoneTarget = 4200; 
         currentUnlockInterval = 1200; 
         unlockedEnemies = 3; 
+        killsPerLife = 120;
         break;
       case 'progresivo': 
         diffMultiplier = 1.0; diffMultiplierSpeed = 1.1; spawnWeightFactor = 0.72; 
-        spawnRate = 120; player.vida = 5; break;
+        spawnRate = 120; player.vida = 5; killsPerLife = 90; break;
     }
   };
 
