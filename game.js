@@ -9,7 +9,7 @@
   /* =========================================================
      CONSTANTS & CONFIG
      ========================================================= */
-  const WORLD = Object.freeze({ WIDTH: 4000, HEIGHT: 4000 });
+  const WORLD = Object.freeze({ WIDTH: 6000, HEIGHT: 6000 });
   const SAVE_KEY = 'space_defender_records_v2';
   const STAR_COUNT = 300;
   const POWER_DURATION = 480;       // frames (~8 seconds at 60fps)
@@ -987,12 +987,38 @@
         e.y += (dy / d) * e.speed;
       }
 
-      // Enemy AI: Spells vs Bullets
+      // Enemy AI: Superpowers for Elite Enemies
       e.spellTimer++;
-      if (e.name === 'Overlord' && e.spellTimer > 240 && d > 1) {
-        bullets.push({ x: e.x, y: e.y, dx: -(dx/d)*3, dy: -(dy/d)*3, color: '#ff3366', source: 'enemy_bullet' });
+
+      if (e.name === 'Interceptor' && e.spellTimer > 250 && d > 1) {
+        // Slow targeted fire
+        bullets.push({ 
+          x: e.x, y: e.y, 
+          dx: (dx/d)*2.2, dy: (dy/d)*2.2, // Slower projectile speed
+          color: '#ff007f', 
+          source: 'enemy_bullet' 
+        });
         e.spellTimer = 0;
-      } else if ((e.name === 'Pulsar' || e.name === 'Interceptor') && e.spellTimer > 200 && d > 1) {
+      } else if (e.name === 'Goliath' && e.spellTimer > 360) {
+        // Healer: Restores 100% HP to other enemies
+        let healedAny = false;
+        for (const other of enemies) {
+          if (other !== e && other.hp < other.maxHp) {
+            other.hp = other.maxHp;
+            healedAny = true;
+            createParticles(other.x, other.y, '#2ecc71', 10);
+          }
+        }
+        if (healedAny) {
+           createFloatingText(e.x, e.y, "💚 REPARACIÓN GRUPAL", "#2ecc71");
+           SFX.play(400, 200, 'sine', 0.5, 0.2);
+        }
+        e.spellTimer = 0;
+      } else if (e.name === 'Overlord' && e.spellTimer > 200 && d > 1) {
+        // Keeping the original Overlord spread/bullets but slower
+        bullets.push({ x: e.x, y: e.y, dx: -(dx/d)*3, dy: -(dy/d)*3, color: '#f1c40f', source: 'enemy_bullet' });
+        e.spellTimer = 0;
+      } else if (e.name === 'Pulsar' && e.spellTimer > 200 && d > 1) {
         bullets.push({ x: e.x, y: e.y, dx: -(dx/d)*4, dy: -(dy/d)*4, color: '#a349a4', source: 'enemy_spell' });
         e.spellTimer = 0;
       }
@@ -1031,6 +1057,18 @@
         // Player bullets vs enemies
         if (b.source === 'manual' || b.source === 'auto') {
           if (Math.abs(b.x - e.x) < e.size && Math.abs(b.y - e.y) < e.size) {
+            
+            // Overlord Shield Check: Invulnerable during 4s of 10s cycle
+            if (e.name === 'Overlord') {
+              const cycle = frame % 600; // 10s cycle (600 frames)
+              if (cycle < 240) { // First 4s: Shielded
+                createParticles(b.x, b.y, '#00ffff', 5);
+                bullets.splice(i, 1);
+                SFX.hit();
+                continue; 
+              }
+            }
+
             bullets.splice(i, 1);
             e.hp--;
             createParticles(b.x, b.y, '#ffffff', 4);
@@ -1062,11 +1100,25 @@
       
       if (!dead && distSqBody < collisionThreshold * collisionThreshold) {
         if (player.powers.shield <= 0) {
+          
+          // Collision penalty check for Overlord Shield (Player gets knocked back/damaged)
+          let canDamagePlayer = true;
+          if (e.name === 'Overlord' && (frame % 600) < 240) {
+             // If shield is active, Overlord doesn't take damage even on body collision
+             // but still damages player
+          }
+
           if (!isPractice) player.vida--;
           damageFlash = 1.0;
           shakeAmt = 20; 
           createParticles(player.x, player.y, '#ff3366', 30);
           SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
+          
+          if (e.name === 'Overlord' && (frame % 600) < 240) {
+             dead = false; // Don't kill Overlord if shielded
+          } else {
+             dead = true;
+          }
         } else {
           const shieldPts = Math.ceil(e.pts * diffMultiplier * 0.5);
           addScore(shieldPts);
@@ -1656,7 +1708,24 @@
       ctx.font = '8px Orbitron';
       ctx.textAlign = 'center';
       ctx.fillText(e.name, 0, -e.size - 8);
-      ctx.globalAlpha = 1;
+      // Overlord Shield Visual
+      if (e.name === 'Overlord') {
+        const cycle = frame % 600;
+        if (cycle < 240) {
+          ctx.beginPath();
+          ctx.arc(0, 0, e.size + 15, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
+          ctx.lineWidth = 4;
+          ctx.setLineDash([5, 5]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Pulsing glow
+          ctx.globalAlpha = 0.3 + Math.sin(frame * 0.2) * 0.2;
+          ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
       
       ctx.restore();
 
