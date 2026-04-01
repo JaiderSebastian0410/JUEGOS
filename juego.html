@@ -244,9 +244,23 @@
     <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; width: 100%; max-width: 350px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px;">
       <button class="btn" onclick="pauseGame(false)">Reanudar</button>
       
-      <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-        <span>🔊 Sonido</span>
-        <input type="checkbox" id="pause-sound-toggle" checked style="width: 20px; height: 20px;" onchange="toggleSoundFromPause(this)">
+      <!-- Stats Partiales -->
+      <div id="pause-stats" style="background: rgba(0,255,255,0.05); padding: 10px; border-radius: 8px; font-size: 0.9rem; color: #fff; text-align: left; border: 1px solid rgba(0,255,255,0.1);">
+        <p style="margin: 5px 0;">⭐ Score: <span id="pause-score">0</span></p>
+        <p style="margin: 5px 0;">☠️ Kills: <span id="pause-kills">0</span></p>
+        <p style="margin: 5px 0;">⏱️ Tiempo: <span id="pause-time">0</span>s</p>
+        <p style="margin: 5px 0;">❤️ Vidas: <span id="pause-vida">0</span></p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+           <span>🔊 Sonido</span>
+           <input type="checkbox" id="pause-sound-toggle" checked style="width: 20px; height: 20px;" onchange="toggleSoundFromPause(this)">
+        </div>
+        <label style="display: flex; flex-direction: column; font-size: 0.8rem; gap: 5px; text-align: left;">
+          <span>Volumen: <span id="pause-vol-label" style="color:cyan;">100%</span></span>
+          <input type="range" id="pause-volume-slider" min="0" max="1" step="0.1" value="1" onchange="updateVolume(this.value); document.getElementById('volume-slider').value = this.value;" oninput="document.getElementById('pause-vol-label').innerText = Math.round(this.value * 100) + '%'; document.getElementById('vol-label').innerText = Math.round(this.value * 100) + '%'">
+        </label>
       </div>
       
       <button id="end-practice-btn" class="btn secondary" style="display:none; border-color: #2ecc71; color: #2ecc71;" onclick="endPractice()">Finalizar Partida</button>

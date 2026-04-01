@@ -1923,6 +1923,19 @@
       gameState = 'CHOOSING'; // Reusing Choosing state to pause loop
       if (animationId) cancelAnimationFrame(animationId);
       animationId = null;
+      
+      // Update Pause Stats
+      if ($('pause-score')) $('pause-score').innerText = score;
+      if ($('pause-kills')) $('pause-kills').innerText = kills;
+      if ($('pause-time')) $('pause-time').innerText = time;
+      if ($('pause-vida')) $('pause-vida').innerText = isPractice ? '∞' : player.vida;
+      
+      // Sync Volume UI
+      const vSlider = $('pause-volume-slider');
+      const vLabel = $('pause-vol-label');
+      if (vSlider) vSlider.value = masterVolume;
+      if (vLabel) vLabel.innerText = Math.round(masterVolume * 100) + '%';
+      
       $('pause-menu').classList.add('active');
     } else {
       $('pause-menu').classList.remove('active');
@@ -2017,8 +2030,12 @@
      PREMIUM POWER CHOICE
      ========================================================= */
   window.choosePremiumPower = function(type) {
-    if (gameState !== 'CHOOSING') return; // BUG FIX: already chosen
+    if (gameState !== 'CHOOSING') return; // CRITICAL BUG FIX: prevent multiple clicks
     
+    // Resume IMMEDIATELY to block further inputs
+    gameState = 'PLAYING';
+    $('levelup-menu').classList.remove('active');
+
     if (type === 'life') {
       player.vida++;
     } else if (type === 'ultra') {
@@ -2027,11 +2044,11 @@
     } else {
       player.powers[type] += PREMIUM_DURATION;
     }
+    
     createParticles(player.x, player.y, '#ffffff', 50);
-    $('levelup-menu').classList.remove('active');
     SFX.powerup();
-    gameState = 'PLAYING';
-    requestAnimationFrame(gameLoop);
+    
+    if (!animationId) animationId = requestAnimationFrame(gameLoop);
   };
 
   /* =========================================================
