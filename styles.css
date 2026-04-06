@@ -36,6 +36,14 @@ canvas { display: block; }
 
 .overlay.active { display: flex; }
 
+#menu-bg-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
 .overlay h1 {
   font-family: 'Orbitron', sans-serif;
   font-size: clamp(1.8rem, 5vw, 3rem);
@@ -291,7 +299,7 @@ canvas { display: block; }
 }
 
 @media (min-width: 1025px) {
-  #mobile-controls, #joystick-base, #joystick-handle { display: none !important; }
+  #mobile-controls { display: none !important; }
 }
 
 .touch-btn {

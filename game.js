@@ -50,6 +50,50 @@
   const $ = (id) => document.getElementById(id);
 
   /* =========================================================
+     ENEMY OBJECT POOL
+     ========================================================= */
+  const EnemyPool = {
+    _pool: [],
+    get() {
+      return this._pool.length > 0 ? this._pool.pop() : {};
+    },
+    release(e) {
+      if (this._pool.length < 150) this._pool.push(e);
+    }
+  };
+
+  /* =========================================================
+     SPATIAL GRID (Collision Optimization)
+     ========================================================= */
+  const GRID_CELL = 200;
+  const spatialGrid = {};
+  function buildSpatialGrid(list) {
+    for (const k in spatialGrid) delete spatialGrid[k];
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const cx = (e.x / GRID_CELL) | 0;
+      const cy = (e.y / GRID_CELL) | 0;
+      const key = cx + ',' + cy;
+      if (!spatialGrid[key]) spatialGrid[key] = [];
+      spatialGrid[key].push(e);
+    }
+  }
+  function getNearbyEnemies(x, y, radius) {
+    const result = [];
+    const minCX = ((x - radius) / GRID_CELL) | 0;
+    const maxCX = ((x + radius) / GRID_CELL) | 0;
+    const minCY = ((y - radius) / GRID_CELL) | 0;
+    const maxCY = ((y + radius) / GRID_CELL) | 0;
+    for (let cx = minCX; cx <= maxCX; cx++) {
+      for (let cy = minCY; cy <= maxCY; cy++) {
+        const cell = spatialGrid[cx + ',' + cy];
+        if (cell) for (let i = 0; i < cell.length; i++) result.push(cell[i]);
+      }
+    }
+    return result;
+  }
+
+  /* =========================================================
      AUDIO SYNTHESIZER
      ========================================================= */
   let audioCtx = null;
@@ -394,26 +438,13 @@
       createParticles(e.x, e.y, e.color, 30);
       createFloatingText(e.x, e.y, `+${ultraPts}`, '#ff007f');
     }
+    for (let i = 0; i < enemies.length; i++) EnemyPool.release(enemies[i]);
     enemies = [];
     SFX.ultra();
     showAnnouncement("⚡ ¡FLASH NOVA! ⚡");
   }
 
-  // Touch — virtual joystick
-  function updateJoystickUI(handleUI, stickUI) {
-    if (!joystickOrigin || !joystickCurrent || !handleUI || !stickUI) return;
-    const dx = joystickCurrent.x - joystickOrigin.x;
-    const dy = joystickCurrent.y - joystickOrigin.y;
-    const dist = Math.min(Math.hypot(dx, dy), 40);
-    const angle = Math.atan2(dy, dx);
-    const hx = Math.cos(angle) * dist;
-    const hy = Math.sin(angle) * dist;
-    stickUI.style.left = joystickOrigin.x + 'px';
-    stickUI.style.top = joystickOrigin.y + 'px';
-    handleUI.style.left = (joystickOrigin.x + hx) + 'px';
-    handleUI.style.top = (joystickOrigin.y + hy) + 'px';
-  }
-
+  // Touch — INVISIBLE joystick (gesture-based, no fixed UI)
   window.addEventListener('touchstart', (e) => {
     isMobile = true;
     if (gameState !== 'PLAYING') return;
@@ -428,13 +459,6 @@
       if (!joystickOrigin) {
         joystickOrigin = { x: touch.clientX, y: touch.clientY, id: touch.identifier };
         joystickCurrent = { x: touch.clientX, y: touch.clientY };
-        
-        const stickUI = document.getElementById('joystick-base');
-        const handleUI = document.getElementById('joystick-handle');
-        if (stickUI) stickUI.style.display = 'block';
-        if (handleUI) handleUI.style.display = 'block';
-        
-        updateJoystickUI(handleUI, stickUI);
         break;
       }
     }
@@ -445,9 +469,6 @@
       const touch = Array.from(e.changedTouches).find(t => t.identifier === joystickOrigin.id);
       if (touch) {
         joystickCurrent = { x: touch.clientX, y: touch.clientY };
-        const stickUI = document.getElementById('joystick-base');
-        const handleUI = document.getElementById('joystick-handle');
-        updateJoystickUI(handleUI, stickUI);
         e.preventDefault();
       }
     }
@@ -459,10 +480,6 @@
       if (touch) {
         joystickOrigin = null; 
         joystickCurrent = null;
-        const stickUI = document.getElementById('joystick-base');
-        const handleUI = document.getElementById('joystick-handle');
-        if (stickUI) stickUI.style.display = 'none';
-        if (handleUI) handleUI.style.display = 'none';
       }
     }
   });
@@ -487,18 +504,51 @@
   let bgReady = false;
   
   const animatedStars = [];
+  const gameNebulae = []; // Pre-computed nebula positions for in-game rendering
 
   function initBackground() {
-    bgCtx.fillStyle = '#05040a'; // Ultra Deep space
+    bgCtx.fillStyle = '#03020a';
     bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
 
-    // Removed giant central galaxy to keep background uniform and non-disruptive.
+    // 1. Deep space nebula clouds (vibrant purple/blue/pink)
+    const nebulaConfigs = [
+      { x: 0.15, y: 0.2, r: 1800, colors: ['rgba(90,20,140,0.12)', 'rgba(40,10,80,0.08)', 'rgba(0,0,0,0)'] },
+      { x: 0.7, y: 0.15, r: 2200, colors: ['rgba(20,40,160,0.10)', 'rgba(60,20,120,0.07)', 'rgba(0,0,0,0)'] },
+      { x: 0.4, y: 0.6, r: 2500, colors: ['rgba(140,30,80,0.09)', 'rgba(80,15,60,0.06)', 'rgba(0,0,0,0)'] },
+      { x: 0.85, y: 0.7, r: 1600, colors: ['rgba(30,60,150,0.11)', 'rgba(20,30,100,0.07)', 'rgba(0,0,0,0)'] },
+      { x: 0.5, y: 0.35, r: 2000, colors: ['rgba(100,20,120,0.08)', 'rgba(60,10,80,0.05)', 'rgba(0,0,0,0)'] },
+      { x: 0.2, y: 0.8, r: 1400, colors: ['rgba(150,40,100,0.10)', 'rgba(80,20,60,0.06)', 'rgba(0,0,0,0)'] },
+      { x: 0.9, y: 0.4, r: 1700, colors: ['rgba(50,30,140,0.09)', 'rgba(30,15,90,0.06)', 'rgba(0,0,0,0)'] },
+    ];
+    for (const nc of nebulaConfigs) {
+      const nx = nc.x * WORLD.WIDTH, ny = nc.y * WORLD.HEIGHT;
+      const g = bgCtx.createRadialGradient(nx, ny, 0, nx, ny, nc.r);
+      g.addColorStop(0, nc.colors[0]);
+      g.addColorStop(0.5, nc.colors[1]);
+      g.addColorStop(1, nc.colors[2]);
+      bgCtx.fillStyle = g;
+      bgCtx.fillRect(nx - nc.r, ny - nc.r, nc.r * 2, nc.r * 2);
+    }
 
-    // 2. Distant Miniature Galaxies (Reference Quality)
+    // 2. Secondary wispy nebula filaments
+    for (let i = 0; i < 25; i++) {
+      const nx = Math.random() * WORLD.WIDTH;
+      const ny = Math.random() * WORLD.HEIGHT;
+      const nr = random(300, 900);
+      const hue = [280, 220, 330, 200, 260][Math.floor(Math.random() * 5)];
+      const g = bgCtx.createRadialGradient(nx, ny, 0, nx, ny, nr);
+      g.addColorStop(0, `hsla(${hue}, 60%, 30%, 0.08)`);
+      g.addColorStop(0.6, `hsla(${hue}, 50%, 15%, 0.04)`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      bgCtx.fillStyle = g;
+      bgCtx.beginPath(); bgCtx.arc(nx, ny, nr, 0, Math.PI * 2); bgCtx.fill();
+    }
+
+    // 3. Distant Miniature Galaxies
     for(let gIdx = 0; gIdx < 15; gIdx++) {
       const gx = Math.random() * WORLD.WIDTH;
       const gy = Math.random() * WORLD.HEIGHT;
-      const gSizeScale = Math.random() * 0.3 + 0.1; // Varied scales
+      const gSizeScale = Math.random() * 0.3 + 0.1;
       const gAlpha = Math.random() * 0.5 + 0.2;
       const gAngle = Math.random() * Math.PI * 2;
       const type = Math.random() > 0.5 ? 'spiral' : 'irregular';
@@ -506,17 +556,15 @@
       bgCtx.save();
       bgCtx.translate(gx, gy);
       bgCtx.rotate(gAngle);
-      bgCtx.scale(gSizeScale, gSizeScale * (Math.random() * 0.6 + 0.2)); // Dynamic flattening
+      bgCtx.scale(gSizeScale, gSizeScale * (Math.random() * 0.6 + 0.2));
       
       const gRadius = 600;
-      // Core
       const gCore = bgCtx.createRadialGradient(0, 0, 0, 0, 0, gRadius * 0.2);
       gCore.addColorStop(0, `rgba(255, 240, 220, ${gAlpha})`);
       gCore.addColorStop(1, 'rgba(0,0,0,0)');
       bgCtx.fillStyle = gCore;
       bgCtx.fillRect(-gRadius, -gRadius, gRadius*2, gRadius*2);
 
-      // Dust lanes & Stars
       const gArms = type === 'spiral' ? (Math.random() > 0.5 ? 2 : 4) : 1;
       const baseR = type === 'spiral' ? 100 : 255;
       const baseB = type === 'spiral' ? 255 : 150;
@@ -528,112 +576,87 @@
           const x = Math.cos(a) * radius;
           const y = Math.sin(a) * radius;
           const s = Math.random() * 5 + 1;
-          
           bgCtx.fillStyle = `rgba(${baseR}, 180, ${baseB}, ${gAlpha * (1 - radius/gRadius)})`;
           bgCtx.fillRect(x, y, s, s);
       }
       bgCtx.restore();
     }
 
-    // 3. High-res Distant Stars (Reduced for mobile performance)
-    const totalStars = isMobile ? 3000 : 10000;
+    // 4. Dense star field
+    const totalStars = isMobile ? 5000 : 15000;
     for(let i=0; i<totalStars; i++) {
-      const alpha = Math.random() * 0.5 + 0.1;
-      const size = Math.random() > 0.95 ? 2.5 : 1;
-      
+      const alpha = Math.random() * 0.6 + 0.1;
+      const size = Math.random() > 0.93 ? 2.5 : (Math.random() > 0.7 ? 1.5 : 1);
       let r=255, g=255, b=255;
       const roll = Math.random();
-      if(roll < 0.2) { r=150; g=200; b=255; } else if (roll < 0.4) { r=255; g=200; b=150; }
-      
+      if(roll < 0.15) { r=170; g=200; b=255; }
+      else if (roll < 0.25) { r=255; g=200; b=160; }
+      else if (roll < 0.32) { r=220; g=180; b=255; }
+      else if (roll < 0.37) { r=255; g=180; b=200; }
       bgCtx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
       bgCtx.fillRect(Math.random()*WORLD.WIDTH, Math.random()*WORLD.HEIGHT, size, size);
     }
     
-    // 4. Bright Outstanding Stars (with Cross Flares)
-    for(let i=0; i<30; i++) {
+    // 5. Bright Stars with Cross Flares
+    for(let i=0; i<40; i++) {
         const x = Math.random() * WORLD.WIDTH;
         const y = Math.random() * WORLD.HEIGHT;
         const r = Math.random() * 2 + 1;
+        const hue = [0, 30, 200, 280, 330][Math.floor(Math.random() * 5)];
         
-        const glow = bgCtx.createRadialGradient(x, y, 0, x, y, r * 6);
+        const glow = bgCtx.createRadialGradient(x, y, 0, x, y, r * 8);
         glow.addColorStop(0, 'rgba(255,255,255,0.9)');
-        glow.addColorStop(0.2, 'rgba(150,220,255,0.4)');
+        glow.addColorStop(0.15, `hsla(${hue}, 70%, 80%, 0.5)`);
+        glow.addColorStop(0.4, `hsla(${hue}, 60%, 50%, 0.15)`);
         glow.addColorStop(1, 'rgba(0,0,0,0)');
         bgCtx.fillStyle = glow;
-        bgCtx.beginPath(); bgCtx.arc(x,y,r*6, 0, Math.PI*2); bgCtx.fill();
+        bgCtx.beginPath(); bgCtx.arc(x,y,r*8, 0, Math.PI*2); bgCtx.fill();
         
-        bgCtx.fillStyle = 'rgba(255,255,255,0.5)';
-        bgCtx.fillRect(x - r*4, y - 0.5, r*8, 1);
-        bgCtx.fillRect(x - 0.5, y - r*4, 1, r*8);
+        bgCtx.fillStyle = `hsla(${hue}, 50%, 90%, 0.4)`;
+        bgCtx.fillRect(x - r*5, y - 0.5, r*10, 1);
+        bgCtx.fillRect(x - 0.5, y - r*5, 1, r*10);
         bgCtx.fillStyle = '#fff';
         bgCtx.beginPath(); bgCtx.arc(x, y, r*0.5, 0, Math.PI*2); bgCtx.fill();
     }
 
-    // 5. Cinematic Planets (Much smaller, far away, and sparse to not overlap unnaturally)
+    // 6. Cinematic Planets
     const planetColors = [
-      {c: '#3498db', a: '#1f2e3d'}, // Deep Blue
-      {c: '#e74c3c', a: '#4a1511'}, // Deep Red
-      {c: '#f1c40f', a: '#5a4a06'}, // Yellow/Gold
-      {c: '#9b59b6', a: '#3c1d47'}, // Purple
-      {c: '#1abc9c', a: '#0a4237'}  // Emerald
+      {c: '#3498db', a: '#1f2e3d'}, {c: '#e74c3c', a: '#4a1511'},
+      {c: '#f1c40f', a: '#5a4a06'}, {c: '#9b59b6', a: '#3c1d47'},
+      {c: '#1abc9c', a: '#0a4237'}
     ];
-    
     const planetPositions = [];
     outerPlanetLoop: for (let i = 0; i < 25; i++) {
-      let x, y;
-      let collisionRetries = 0;
-      // Ensure planets are extremely separated
+      let x, y, collisionRetries = 0;
       do {
          x = Math.random() * WORLD.WIDTH;
          y = Math.random() * WORLD.HEIGHT;
          collisionRetries++;
-         if (collisionRetries > 100) continue outerPlanetLoop; // Give up on this planet to avoid infinite loops
+         if (collisionRetries > 100) continue outerPlanetLoop;
       } while (planetPositions.some(p => Math.hypot(p.x - x, p.y - y) < 800));
-      
       planetPositions.push({x, y});
-      
-      // Depth logic: Make them very small, max radius is 30, blending into the dark background
-      const r = Math.random() * 20 + 8; // Tiny, distant planets
-      const alphaDepth = Math.random() * 0.4 + 0.3; // 0.3 to 0.7 opacity max
-
+      const r = Math.random() * 20 + 8;
+      const alphaDepth = Math.random() * 0.4 + 0.3;
       const clr = planetColors[Math.floor(Math.random() * planetColors.length)];
-      
       bgCtx.save();
       bgCtx.translate(x, y);
       bgCtx.rotate(Math.random() * Math.PI);
-      bgCtx.globalAlpha = alphaDepth; 
-
+      bgCtx.globalAlpha = alphaDepth;
       const pg = bgCtx.createRadialGradient(-r*0.3, -r*0.3, 0, 0, 0, r);
-      pg.addColorStop(0, clr.c);
-      pg.addColorStop(0.7, clr.a);
-      pg.addColorStop(1, '#020205');
-      
-      bgCtx.beginPath();
-      bgCtx.arc(0, 0, r, 0, Math.PI * 2);
-      bgCtx.fillStyle = pg;
-      bgCtx.fill();
-
-      // Delicate Rings
+      pg.addColorStop(0, clr.c); pg.addColorStop(0.7, clr.a); pg.addColorStop(1, '#020205');
+      bgCtx.beginPath(); bgCtx.arc(0, 0, r, 0, Math.PI * 2); bgCtx.fillStyle = pg; bgCtx.fill();
       if (Math.random() > 0.7) {
         bgCtx.rotate(Math.PI/6);
-        bgCtx.beginPath();
-        bgCtx.ellipse(0, 0, r * 2.5, r * 0.25, 0, 0, Math.PI * 2);
+        bgCtx.beginPath(); bgCtx.ellipse(0, 0, r * 2.5, r * 0.25, 0, 0, Math.PI * 2);
         bgCtx.lineWidth = Math.max(0.5, r * 0.15);
-        bgCtx.strokeStyle = `rgba(200, 200, 255, 0.3)`;
-        bgCtx.stroke();
-        
-        bgCtx.beginPath();
-        bgCtx.ellipse(0, 0, r * 2.2, r * 0.22, 0, 0, Math.PI * 2);
-        bgCtx.lineWidth = Math.max(0.2, r * 0.05);
-        bgCtx.strokeStyle = `#000000`;
-        bgCtx.stroke();
+        bgCtx.strokeStyle = 'rgba(200, 200, 255, 0.3)'; bgCtx.stroke();
       }
       bgCtx.restore();
     }
     
     bgReady = true;
 
-    // 6. Parallax Animated Stars & Elaborate Comets
+    // 7. Parallax Animated Stars & Comets
     for(let i=0; i<200; i++) {
       animatedStars.push({
         x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
@@ -642,12 +665,23 @@
       });
     }
     for(let i=0; i<12; i++) {
-       // Elaborate falling asteroids/comets
       animatedStars.push({
         x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
         speed: Math.random() * 4 + 3, angle: Math.random() * 0.4 + 0.2,
         length: Math.random() * 120 + 60, alpha: Math.random() * 0.6 + 0.3, 
         thickness: Math.random() * 2 + 1.5, type: 'comet'
+      });
+    }
+
+    // 8. Pre-compute in-game nebula positions (small/medium, optimized)
+    for (let i = 0; i < 40; i++) {
+      const hue = [270, 220, 310, 200, 290, 340][Math.floor(Math.random() * 6)];
+      gameNebulae.push({
+        x: Math.random() * WORLD.WIDTH,
+        y: Math.random() * WORLD.HEIGHT,
+        r: random(80, 280),
+        hue,
+        alpha: random(0.03, 0.08)
       });
     }
   }
@@ -664,10 +698,27 @@
         ctx.drawImage(bgCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
       }
     }
+
+    // 1b. In-game nebulae (lightweight, pre-computed positions)
+    if (!isMobile) {
+      for (let i = 0; i < gameNebulae.length; i++) {
+        const n = gameNebulae[i];
+        if (n.x + n.r < camera.x || n.x - n.r > camera.x + camera.width ||
+            n.y + n.r < camera.y || n.y - n.r > camera.y + camera.height) continue;
+        ctx.globalAlpha = n.alpha;
+        const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+        g.addColorStop(0, `hsla(${n.hue}, 50%, 35%, 1)`);
+        g.addColorStop(0.6, `hsla(${n.hue}, 40%, 20%, 0.4)`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1.0;
+    }
     
     // 2. Parallax Animations (Optimized for mobile)
     for (let i=0; i<animatedStars.length; i++) {
-        if (isMobile && i % 2 !== 0) continue; // Show only 50% stars on mobile for performance
+      if (isMobile && i % 2 !== 0) continue;
       const s = animatedStars[i];
       if (s.type === 'comet') {
         s.x += Math.cos(s.angle) * s.speed;
@@ -681,8 +732,6 @@
         if (cx > -s.length - 20 && cx < camera.width + s.length + 20 && cy > -s.length - 20 && cy < camera.height + s.length + 20) {
           ctx.save();
           ctx.globalAlpha = s.alpha;
-          
-          // Realistic flaming trail
           const grad = ctx.createLinearGradient(
              camera.x + cx, camera.y + cy, 
              camera.x + cx - Math.cos(s.angle) * s.length, camera.y + cy - Math.sin(s.angle) * s.length
@@ -690,7 +739,6 @@
           grad.addColorStop(0, 'rgba(255, 220, 150, 1)');
           grad.addColorStop(0.3, 'rgba(255, 100, 50, 0.5)');
           grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          
           ctx.strokeStyle = grad;
           ctx.lineWidth = s.thickness;
           ctx.lineCap = 'round';
@@ -698,15 +746,12 @@
           ctx.moveTo(camera.x + cx, camera.y + cy);
           ctx.lineTo(camera.x + cx - Math.cos(s.angle) * s.length, camera.y + cy - Math.sin(s.angle) * s.length);
           ctx.stroke();
-          
-          // Asteroid Rock Head with glow
           ctx.fillStyle = '#ffeedd';
           ctx.shadowColor = '#ff6600';
           ctx.shadowBlur = 15;
           ctx.beginPath();
           ctx.arc(camera.x + cx, camera.y + cy, s.thickness * 1.5, 0, Math.PI * 2);
           ctx.fill();
-          
           ctx.restore();
         }
       } else {
@@ -955,14 +1000,13 @@
     const spawnX = clamp(player.x + Math.cos(angle) * dist, 100, WORLD.WIDTH - 100);
     const spawnY = clamp(player.y + Math.sin(angle) * dist, 100, WORLD.HEIGHT - 100);
 
-    const baseEnemy = {
-      x: spawnX, y: spawnY,
-      size: selectedType.size, speed: baseSpeed,
-      type: selectedType.shape, color: selectedType.color,
-      hp: selectedType.hp, maxHp: selectedType.hp,
-      name: selectedType.name, pts: selectedType.pts,
-      spellTimer: 0
-    };
+    const baseEnemy = EnemyPool.get();
+    baseEnemy.x = spawnX; baseEnemy.y = spawnY;
+    baseEnemy.size = selectedType.size; baseEnemy.speed = baseSpeed;
+    baseEnemy.type = selectedType.shape; baseEnemy.color = selectedType.color;
+    baseEnemy.hp = selectedType.hp; baseEnemy.maxHp = selectedType.hp;
+    baseEnemy.name = selectedType.name; baseEnemy.pts = selectedType.pts;
+    baseEnemy.spellTimer = 0;
     enemies.push(baseEnemy);
   }
 
@@ -970,6 +1014,7 @@
      ENEMY UPDATE & COLLISIONS
      ========================================================= */
   function updateEnemies() {
+    buildSpatialGrid(enemies);
     const alive = [];
     const maxDistSq = 2500 * 2500; // Cull enemies too far away to prevent ghost accumulation lag
 
@@ -1132,7 +1177,7 @@
         createParticles(e.x, e.y, e.color, 15);
       }
 
-      if (!dead) alive.push(e);
+      if (!dead) { alive.push(e); } else { EnemyPool.release(e); }
     }
     enemies = alive;
   }
@@ -2036,10 +2081,12 @@
     $('start-menu').classList.add('active');
   };
 
-  let countdownInterval = null;
+  let countdownRAF = null;
+  let countdownInterval = null; // kept for cancel compatibility
   function startCountdown(seconds = 3) {
     if (animationId) cancelAnimationFrame(animationId);
-    if (countdownInterval) clearInterval(countdownInterval);
+    if (countdownRAF) cancelAnimationFrame(countdownRAF);
+    if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
     animationId = null;
 
     // Reset Difficulty params (Important for Retry)
@@ -2048,6 +2095,8 @@
     kills = 0; killsMilestone = 0;
     time = 0; frame = 0;
     ultraEnergy = 0;
+    // Release pooled enemies
+    for (let i = 0; i < enemies.length; i++) EnemyPool.release(enemies[i]);
     bullets = []; enemies = []; powerUps = []; hearts = [];
     player.powers = { auto: 0, manual: 0, speed: 0, shield: 0 };
     player.debuffs = { slow: 0, disable: 0, noscore: 0, powerlock: 0 };
@@ -2068,19 +2117,24 @@
     countEl.style.display = 'block';
     let count = seconds;
     countEl.innerText = count;
+    let lastTick = performance.now();
 
-    countdownInterval = setInterval(() => {
-      count--;
-      if (count <= 0) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-        countEl.style.display = 'none';
-        gameState = 'PLAYING';
-        if (!animationId) animationId = requestAnimationFrame(gameLoop);
-      } else {
+    function countdownStep(now) {
+      if (now - lastTick >= 1000) {
+        lastTick = now;
+        count--;
+        if (count <= 0) {
+          countdownRAF = null;
+          countEl.style.display = 'none';
+          gameState = 'PLAYING';
+          if (!animationId) animationId = requestAnimationFrame(gameLoop);
+          return;
+        }
         countEl.innerText = count;
       }
-    }, 1000);
+      countdownRAF = requestAnimationFrame(countdownStep);
+    }
+    countdownRAF = requestAnimationFrame(countdownStep);
   }
 
   function openTutorial() {
@@ -2186,10 +2240,10 @@
   window.retryGame = function() {
     const retryBtn = $('retry-btn');
     
-    if (countdownInterval) {
+    if (countdownRAF) {
       // CANCEL LOGIC
-      clearInterval(countdownInterval);
-      countdownInterval = null;
+      cancelAnimationFrame(countdownRAF);
+      countdownRAF = null;
       $('countdown').style.display = 'none';
       if (retryBtn) {
         retryBtn.innerText = 'Reintentar';

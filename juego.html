@@ -44,9 +44,6 @@
   <div id="countdown">3</div>
 
   <!-- Mobile Controls -->
-  <div id="joystick-base" style="position: absolute; left: 0; top: 0; width: 120px; height: 120px; border: 2px solid rgba(0,255,255,0.4); border-radius: 50%; display: none; margin-left: -60px; margin-top: -60px; pointer-events: none; z-index: 100; box-shadow: 0 0 15px rgba(0,255,255,0.2);"></div>
-  <div id="joystick-handle" style="position: absolute; left: 0; top: 0; width: 50px; height: 50px; background: rgba(0,255,255,0.6); border-radius: 50%; display: none; margin-left: -25px; margin-top: -25px; pointer-events: none; z-index: 100; box-shadow: 0 0 10px rgba(0,255,255,0.5);"></div>
-
   <div id="mobile-controls">
     <div class="touch-btn" id="fire-btn">🔥</div>
     <div class="touch-btn ultra-btn-disabled" id="ultra-btn">⚡</div>
@@ -57,6 +54,7 @@
 
   <!-- Welcome Menu -->
   <div id="start-menu" class="overlay active">
+    <canvas id="menu-bg-canvas"></canvas>
     <h1 style="color: #00ffff;">SPACE DEFENDER</h1>
     
     <div style="margin-bottom: 20px; background: rgba(0,255,255,0.05); padding: 20px; border-radius: 12px; width: 100%; max-width: 500px; display: flex; align-items: center; gap: 20px; border: 1px solid rgba(0,255,255,0.2);">
@@ -313,6 +311,70 @@
 
   <!-- Game Engine -->
   <script src="game.js"></script>
+
+  <!-- Menu Background Animation -->
+  <script>
+  (function() {
+    const mc = document.getElementById('menu-bg-canvas');
+    if (!mc) return;
+    const mctx = mc.getContext('2d');
+    let mStars = [], mNebulae = [], mComets = [];
+    function mResize() { mc.width = window.innerWidth; mc.height = window.innerHeight; }
+    window.addEventListener('resize', mResize); mResize();
+    // Init stars
+    for (let i = 0; i < 400; i++) {
+      const roll = Math.random();
+      let r=255,g=255,b=255;
+      if(roll<0.15){r=170;g=200;b=255;}else if(roll<0.3){r=220;g=180;b=255;}else if(roll<0.4){r=255;g=180;b=210;}
+      mStars.push({x:Math.random()*2000,y:Math.random()*2000,s:Math.random()*2.5+0.5,a:Math.random()*0.8+0.2,sp:Math.random()*0.3+0.05,ph:Math.random()*Math.PI*2,r,g,b});
+    }
+    for (let i=0;i<6;i++){
+      mNebulae.push({x:Math.random(),y:Math.random(),r:Math.random()*300+150,hue:[270,220,310,200,330,280][i%6],a:Math.random()*0.08+0.04,dx:(Math.random()-0.5)*0.15,dy:(Math.random()-0.5)*0.15});
+    }
+    for(let i=0;i<3;i++){
+      mComets.push({x:Math.random()*mc.width,y:Math.random()*mc.height,sp:Math.random()*2+1.5,ang:Math.random()*0.5+0.1,len:Math.random()*80+40,a:Math.random()*0.5+0.3});
+    }
+    let mFrame=0;
+    function mDraw(){
+      if(!document.getElementById('start-menu').classList.contains('active')){requestAnimationFrame(mDraw);return;}
+      mctx.fillStyle='#03020a';mctx.fillRect(0,0,mc.width,mc.height);
+      // Nebulae
+      for(const n of mNebulae){
+        n.x+=n.dx*0.0003;n.y+=n.dy*0.0003;
+        const nx=n.x*mc.width,ny=n.y*mc.height;
+        mctx.globalAlpha=n.a+Math.sin(mFrame*0.008)*0.02;
+        const g=mctx.createRadialGradient(nx,ny,0,nx,ny,n.r);
+        g.addColorStop(0,`hsla(${n.hue},60%,30%,1)`);g.addColorStop(0.5,`hsla(${n.hue},50%,15%,0.5)`);g.addColorStop(1,'rgba(0,0,0,0)');
+        mctx.fillStyle=g;mctx.beginPath();mctx.arc(nx,ny,n.r,0,Math.PI*2);mctx.fill();
+      }
+      mctx.globalAlpha=1;
+      // Stars
+      for(const st of mStars){
+        const px=(st.x+mFrame*st.sp*0.5)%mc.width;
+        const py=(st.y+mFrame*st.sp*0.2)%mc.height;
+        mctx.globalAlpha=st.a*(0.5+Math.sin(mFrame*0.03+st.ph)*0.5);
+        mctx.fillStyle=`rgb(${st.r},${st.g},${st.b})`;
+        mctx.fillRect(px,py,st.s,st.s);
+      }
+      // Comets
+      for(const c of mComets){
+        c.x+=Math.cos(c.ang)*c.sp;c.y+=Math.sin(c.ang)*c.sp;
+        if(c.x>mc.width+100){c.x=-100;c.y=Math.random()*mc.height;}
+        if(c.y>mc.height+100){c.y=-100;c.x=Math.random()*mc.width;}
+        mctx.save();mctx.globalAlpha=c.a;
+        const cg=mctx.createLinearGradient(c.x,c.y,c.x-Math.cos(c.ang)*c.len,c.y-Math.sin(c.ang)*c.len);
+        cg.addColorStop(0,'rgba(255,220,150,1)');cg.addColorStop(0.4,'rgba(255,100,50,0.4)');cg.addColorStop(1,'rgba(0,0,0,0)');
+        mctx.strokeStyle=cg;mctx.lineWidth=2;mctx.lineCap='round';
+        mctx.beginPath();mctx.moveTo(c.x,c.y);mctx.lineTo(c.x-Math.cos(c.ang)*c.len,c.y-Math.sin(c.ang)*c.len);mctx.stroke();
+        mctx.fillStyle='#ffeedd';mctx.beginPath();mctx.arc(c.x,c.y,2,0,Math.PI*2);mctx.fill();
+        mctx.restore();
+      }
+      mctx.globalAlpha=1;
+      mFrame++;requestAnimationFrame(mDraw);
+    }
+    requestAnimationFrame(mDraw);
+  })();
+  </script>
 </body>
 
 </html>
