@@ -917,9 +917,9 @@
     }
 
     // Original speed scaling adjusted by difficulty multiplier. Ensure baseSpeed never exceeds player base speed (3.5)
-    const baseSpeed = Math.min((selectedType.speed + score * 0.0001) * diffMultiplierSpeed, PLAYER_BASE_SPEED);
+    const baseSpeed = Math.min((selectedType.speed + score * 0.0001) * diffMultiplierSpeed, PLAYER_BASE_SPEED * 0.95);
     const angle = Math.random() * Math.PI * 2;
-    const dist = Math.max(camera.width, camera.height) * 0.6;
+    const dist = Math.max(camera.width, camera.height) * 0.7; // Spawn slightly further out to avoid popping
     const spawnX = clamp(player.x + Math.cos(angle) * dist, 100, WORLD.WIDTH - 100);
     const spawnY = clamp(player.y + Math.sin(angle) * dist, 100, WORLD.HEIGHT - 100);
 
@@ -946,13 +946,37 @@
       const dy = player.y - e.y;
       const distSq = dx * dx + dy * dy;
 
-      // Distance culling
-      if (distSq > maxDistSq) continue;
+      // Distance culling (respawn if too far)
+      if (distSq > maxDistSq) {
+        EnemyPool.release(e);
+        continue;
+      }
 
       const d = Math.sqrt(distSq);
       if (d > 1) {
         e.x += (dx / d) * e.speed;
         e.y += (dy / d) * e.speed;
+      }
+
+      // Avoidance (Separation)
+      const cx = (e.x / GRID_CELL) | 0;
+      const cy = (e.y / GRID_CELL) | 0;
+      const key = cx + ',' + cy;
+      const neighbors = spatialGrid[key];
+      if (neighbors) {
+        for (const other of neighbors) {
+          if (other === e) continue;
+          const odx = e.x - other.x;
+          const ody = e.y - other.y;
+          const odSquare = odx * odx + ody * ody;
+          const minDist = e.size + other.size;
+          if (odSquare < minDist * minDist && odSquare > 0.01) {
+             const dn = Math.sqrt(odSquare);
+             const force = (minDist - dn) * 0.5;
+             e.x += (odx / dn) * force;
+             e.y += (ody / dn) * force;
+          }
+        }
       }
 
       // Enemy AI: Superpowers for Elite Enemies
@@ -1944,7 +1968,7 @@
     currentMilestoneTarget = 1600;
     currentUnlockInterval = 700;
     unlockedEnemies = 1;
-    let diffMultiplierSpeed = 1.0;
+    diffMultiplierSpeed = 1.0;
     killsPerLife = 70; // Reset default
 
     switch(diff) {
