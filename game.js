@@ -510,258 +510,179 @@
     bgCtx.fillStyle = '#03020a';
     bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
 
-    // 1. Deep space nebula clouds (vibrant purple/blue/pink)
+    // 1. Deep space nebula clouds (VIVID purple/blue/pink — baked)
     const nebulaConfigs = [
-      { x: 0.15, y: 0.2, r: 1800, colors: ['rgba(90,20,140,0.12)', 'rgba(40,10,80,0.08)', 'rgba(0,0,0,0)'] },
-      { x: 0.7, y: 0.15, r: 2200, colors: ['rgba(20,40,160,0.10)', 'rgba(60,20,120,0.07)', 'rgba(0,0,0,0)'] },
-      { x: 0.4, y: 0.6, r: 2500, colors: ['rgba(140,30,80,0.09)', 'rgba(80,15,60,0.06)', 'rgba(0,0,0,0)'] },
-      { x: 0.85, y: 0.7, r: 1600, colors: ['rgba(30,60,150,0.11)', 'rgba(20,30,100,0.07)', 'rgba(0,0,0,0)'] },
-      { x: 0.5, y: 0.35, r: 2000, colors: ['rgba(100,20,120,0.08)', 'rgba(60,10,80,0.05)', 'rgba(0,0,0,0)'] },
-      { x: 0.2, y: 0.8, r: 1400, colors: ['rgba(150,40,100,0.10)', 'rgba(80,20,60,0.06)', 'rgba(0,0,0,0)'] },
-      { x: 0.9, y: 0.4, r: 1700, colors: ['rgba(50,30,140,0.09)', 'rgba(30,15,90,0.06)', 'rgba(0,0,0,0)'] },
+      { x: 0.15, y: 0.2, r: 1800, colors: ['rgba(120,25,180,0.18)', 'rgba(60,12,100,0.10)', 'rgba(0,0,0,0)'] },
+      { x: 0.7, y: 0.15, r: 2200, colors: ['rgba(30,60,200,0.16)', 'rgba(80,30,160,0.09)', 'rgba(0,0,0,0)'] },
+      { x: 0.4, y: 0.6, r: 2500, colors: ['rgba(180,40,100,0.14)', 'rgba(100,20,80,0.08)', 'rgba(0,0,0,0)'] },
+      { x: 0.85, y: 0.7, r: 1600, colors: ['rgba(40,80,200,0.16)', 'rgba(25,40,130,0.09)', 'rgba(0,0,0,0)'] },
+      { x: 0.5, y: 0.35, r: 2000, colors: ['rgba(140,30,160,0.13)', 'rgba(80,15,100,0.07)', 'rgba(0,0,0,0)'] },
+      { x: 0.2, y: 0.8, r: 1400, colors: ['rgba(200,50,120,0.15)', 'rgba(100,25,70,0.08)', 'rgba(0,0,0,0)'] },
+      { x: 0.9, y: 0.4, r: 1700, colors: ['rgba(70,40,180,0.14)', 'rgba(40,20,110,0.08)', 'rgba(0,0,0,0)'] },
     ];
     for (const nc of nebulaConfigs) {
       const nx = nc.x * WORLD.WIDTH, ny = nc.y * WORLD.HEIGHT;
       const g = bgCtx.createRadialGradient(nx, ny, 0, nx, ny, nc.r);
-      g.addColorStop(0, nc.colors[0]);
-      g.addColorStop(0.5, nc.colors[1]);
-      g.addColorStop(1, nc.colors[2]);
+      g.addColorStop(0, nc.colors[0]); g.addColorStop(0.5, nc.colors[1]); g.addColorStop(1, nc.colors[2]);
       bgCtx.fillStyle = g;
       bgCtx.fillRect(nx - nc.r, ny - nc.r, nc.r * 2, nc.r * 2);
     }
 
-    // 2. Secondary wispy nebula filaments
-    for (let i = 0; i < 25; i++) {
-      const nx = Math.random() * WORLD.WIDTH;
-      const ny = Math.random() * WORLD.HEIGHT;
-      const nr = random(300, 900);
-      const hue = [280, 220, 330, 200, 260][Math.floor(Math.random() * 5)];
+    // 2. Wispy nebula filaments (more saturated)
+    for (let i = 0; i < 30; i++) {
+      const nx = Math.random() * WORLD.WIDTH, ny = Math.random() * WORLD.HEIGHT;
+      const nr = random(300, 1000);
+      const hue = [280, 220, 330, 200, 260, 300][Math.floor(Math.random() * 6)];
       const g = bgCtx.createRadialGradient(nx, ny, 0, nx, ny, nr);
-      g.addColorStop(0, `hsla(${hue}, 60%, 30%, 0.08)`);
-      g.addColorStop(0.6, `hsla(${hue}, 50%, 15%, 0.04)`);
+      g.addColorStop(0, `hsla(${hue}, 65%, 35%, 0.12)`);
+      g.addColorStop(0.5, `hsla(${hue}, 55%, 20%, 0.06)`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       bgCtx.fillStyle = g;
       bgCtx.beginPath(); bgCtx.arc(nx, ny, nr, 0, Math.PI * 2); bgCtx.fill();
     }
 
-    // 3. Distant Miniature Galaxies
-    for(let gIdx = 0; gIdx < 15; gIdx++) {
-      const gx = Math.random() * WORLD.WIDTH;
-      const gy = Math.random() * WORLD.HEIGHT;
+    // 3. Galaxies (reduced on mobile)
+    const galaxyCount = isMobile ? 8 : 12;
+    for(let gIdx = 0; gIdx < galaxyCount; gIdx++) {
+      const gx = Math.random() * WORLD.WIDTH, gy = Math.random() * WORLD.HEIGHT;
       const gSizeScale = Math.random() * 0.3 + 0.1;
       const gAlpha = Math.random() * 0.5 + 0.2;
-      const gAngle = Math.random() * Math.PI * 2;
       const type = Math.random() > 0.5 ? 'spiral' : 'irregular';
-      
       bgCtx.save();
-      bgCtx.translate(gx, gy);
-      bgCtx.rotate(gAngle);
+      bgCtx.translate(gx, gy); bgCtx.rotate(Math.random() * Math.PI * 2);
       bgCtx.scale(gSizeScale, gSizeScale * (Math.random() * 0.6 + 0.2));
-      
       const gRadius = 600;
       const gCore = bgCtx.createRadialGradient(0, 0, 0, 0, 0, gRadius * 0.2);
-      gCore.addColorStop(0, `rgba(255, 240, 220, ${gAlpha})`);
-      gCore.addColorStop(1, 'rgba(0,0,0,0)');
-      bgCtx.fillStyle = gCore;
-      bgCtx.fillRect(-gRadius, -gRadius, gRadius*2, gRadius*2);
-
+      gCore.addColorStop(0, `rgba(255,240,220,${gAlpha})`); gCore.addColorStop(1, 'rgba(0,0,0,0)');
+      bgCtx.fillStyle = gCore; bgCtx.fillRect(-gRadius, -gRadius, gRadius*2, gRadius*2);
       const gArms = type === 'spiral' ? (Math.random() > 0.5 ? 2 : 4) : 1;
-      const baseR = type === 'spiral' ? 100 : 255;
-      const baseB = type === 'spiral' ? 255 : 150;
-      for(let i=0; i<800; i++) {
-          const radius = Math.pow(Math.random(), 1.5) * gRadius;
-          const a = type === 'spiral' 
-            ? (radius * 0.015) + (Math.floor(Math.random() * gArms) * (Math.PI * 2 / gArms)) + (Math.random()*0.8-0.4)
-            : Math.random() * Math.PI * 2;
-          const x = Math.cos(a) * radius;
-          const y = Math.sin(a) * radius;
-          const s = Math.random() * 5 + 1;
-          bgCtx.fillStyle = `rgba(${baseR}, 180, ${baseB}, ${gAlpha * (1 - radius/gRadius)})`;
-          bgCtx.fillRect(x, y, s, s);
+      const baseR = type === 'spiral' ? 100 : 255, baseB = type === 'spiral' ? 255 : 150;
+      const starN = isMobile ? 400 : 700;
+      for(let i=0; i<starN; i++) {
+        const radius = Math.pow(Math.random(), 1.5) * gRadius;
+        const a = type === 'spiral' ? (radius*0.015)+(Math.floor(Math.random()*gArms)*(Math.PI*2/gArms))+(Math.random()*0.8-0.4) : Math.random()*Math.PI*2;
+        bgCtx.fillStyle = `rgba(${baseR},180,${baseB},${gAlpha*(1-radius/gRadius)})`;
+        bgCtx.fillRect(Math.cos(a)*radius, Math.sin(a)*radius, Math.random()*4+1, Math.random()*4+1);
       }
       bgCtx.restore();
     }
 
-    // 4. Dense star field
-    const totalStars = isMobile ? 5000 : 15000;
+    // 4. Star field
+    const totalStars = isMobile ? 3500 : 12000;
     for(let i=0; i<totalStars; i++) {
       const alpha = Math.random() * 0.6 + 0.1;
       const size = Math.random() > 0.93 ? 2.5 : (Math.random() > 0.7 ? 1.5 : 1);
-      let r=255, g=255, b=255;
+      let r=255,g=255,b=255;
       const roll = Math.random();
-      if(roll < 0.15) { r=170; g=200; b=255; }
-      else if (roll < 0.25) { r=255; g=200; b=160; }
-      else if (roll < 0.32) { r=220; g=180; b=255; }
-      else if (roll < 0.37) { r=255; g=180; b=200; }
+      if(roll<0.15){r=170;g=200;b=255;}else if(roll<0.25){r=255;g=200;b=160;}else if(roll<0.32){r=220;g=180;b=255;}else if(roll<0.37){r=255;g=180;b=200;}
       bgCtx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
       bgCtx.fillRect(Math.random()*WORLD.WIDTH, Math.random()*WORLD.HEIGHT, size, size);
     }
-    
-    // 5. Bright Stars with Cross Flares
-    for(let i=0; i<40; i++) {
-        const x = Math.random() * WORLD.WIDTH;
-        const y = Math.random() * WORLD.HEIGHT;
-        const r = Math.random() * 2 + 1;
-        const hue = [0, 30, 200, 280, 330][Math.floor(Math.random() * 5)];
-        
-        const glow = bgCtx.createRadialGradient(x, y, 0, x, y, r * 8);
-        glow.addColorStop(0, 'rgba(255,255,255,0.9)');
-        glow.addColorStop(0.15, `hsla(${hue}, 70%, 80%, 0.5)`);
-        glow.addColorStop(0.4, `hsla(${hue}, 60%, 50%, 0.15)`);
-        glow.addColorStop(1, 'rgba(0,0,0,0)');
-        bgCtx.fillStyle = glow;
-        bgCtx.beginPath(); bgCtx.arc(x,y,r*8, 0, Math.PI*2); bgCtx.fill();
-        
-        bgCtx.fillStyle = `hsla(${hue}, 50%, 90%, 0.4)`;
-        bgCtx.fillRect(x - r*5, y - 0.5, r*10, 1);
-        bgCtx.fillRect(x - 0.5, y - r*5, 1, r*10);
-        bgCtx.fillStyle = '#fff';
-        bgCtx.beginPath(); bgCtx.arc(x, y, r*0.5, 0, Math.PI*2); bgCtx.fill();
+
+    // 5. Bright Stars
+    for(let i=0; i<35; i++) {
+      const x=Math.random()*WORLD.WIDTH, y=Math.random()*WORLD.HEIGHT, r=Math.random()*2+1;
+      const hue=[0,30,200,280,330][Math.floor(Math.random()*5)];
+      const glow=bgCtx.createRadialGradient(x,y,0,x,y,r*8);
+      glow.addColorStop(0,'rgba(255,255,255,0.9)'); glow.addColorStop(0.15,`hsla(${hue},70%,80%,0.5)`);
+      glow.addColorStop(0.4,`hsla(${hue},60%,50%,0.15)`); glow.addColorStop(1,'rgba(0,0,0,0)');
+      bgCtx.fillStyle=glow; bgCtx.beginPath(); bgCtx.arc(x,y,r*8,0,Math.PI*2); bgCtx.fill();
+      bgCtx.fillStyle=`hsla(${hue},50%,90%,0.4)`;
+      bgCtx.fillRect(x-r*5,y-0.5,r*10,1); bgCtx.fillRect(x-0.5,y-r*5,1,r*10);
+      bgCtx.fillStyle='#fff'; bgCtx.beginPath(); bgCtx.arc(x,y,r*0.5,0,Math.PI*2); bgCtx.fill();
     }
 
-    // 6. Cinematic Planets
-    const planetColors = [
-      {c: '#3498db', a: '#1f2e3d'}, {c: '#e74c3c', a: '#4a1511'},
-      {c: '#f1c40f', a: '#5a4a06'}, {c: '#9b59b6', a: '#3c1d47'},
-      {c: '#1abc9c', a: '#0a4237'}
-    ];
-    const planetPositions = [];
-    outerPlanetLoop: for (let i = 0; i < 25; i++) {
-      let x, y, collisionRetries = 0;
-      do {
-         x = Math.random() * WORLD.WIDTH;
-         y = Math.random() * WORLD.HEIGHT;
-         collisionRetries++;
-         if (collisionRetries > 100) continue outerPlanetLoop;
-      } while (planetPositions.some(p => Math.hypot(p.x - x, p.y - y) < 800));
-      planetPositions.push({x, y});
-      const r = Math.random() * 20 + 8;
-      const alphaDepth = Math.random() * 0.4 + 0.3;
-      const clr = planetColors[Math.floor(Math.random() * planetColors.length)];
-      bgCtx.save();
-      bgCtx.translate(x, y);
-      bgCtx.rotate(Math.random() * Math.PI);
-      bgCtx.globalAlpha = alphaDepth;
-      const pg = bgCtx.createRadialGradient(-r*0.3, -r*0.3, 0, 0, 0, r);
-      pg.addColorStop(0, clr.c); pg.addColorStop(0.7, clr.a); pg.addColorStop(1, '#020205');
-      bgCtx.beginPath(); bgCtx.arc(0, 0, r, 0, Math.PI * 2); bgCtx.fillStyle = pg; bgCtx.fill();
-      if (Math.random() > 0.7) {
-        bgCtx.rotate(Math.PI/6);
-        bgCtx.beginPath(); bgCtx.ellipse(0, 0, r * 2.5, r * 0.25, 0, 0, Math.PI * 2);
-        bgCtx.lineWidth = Math.max(0.5, r * 0.15);
-        bgCtx.strokeStyle = 'rgba(200, 200, 255, 0.3)'; bgCtx.stroke();
-      }
+    // 6. Planets
+    const planetColors=[{c:'#3498db',a:'#1f2e3d'},{c:'#e74c3c',a:'#4a1511'},{c:'#f1c40f',a:'#5a4a06'},{c:'#9b59b6',a:'#3c1d47'},{c:'#1abc9c',a:'#0a4237'}];
+    const planetPositions=[];
+    outerPlanetLoop: for(let i=0;i<20;i++){
+      let x,y,cr=0;
+      do{x=Math.random()*WORLD.WIDTH;y=Math.random()*WORLD.HEIGHT;cr++;if(cr>100)continue outerPlanetLoop;}while(planetPositions.some(p=>Math.hypot(p.x-x,p.y-y)<800));
+      planetPositions.push({x,y});
+      const r=Math.random()*20+8,ad=Math.random()*0.4+0.3;
+      const clr=planetColors[Math.floor(Math.random()*planetColors.length)];
+      bgCtx.save(); bgCtx.translate(x,y); bgCtx.rotate(Math.random()*Math.PI); bgCtx.globalAlpha=ad;
+      const pg=bgCtx.createRadialGradient(-r*0.3,-r*0.3,0,0,0,r);
+      pg.addColorStop(0,clr.c); pg.addColorStop(0.7,clr.a); pg.addColorStop(1,'#020205');
+      bgCtx.beginPath(); bgCtx.arc(0,0,r,0,Math.PI*2); bgCtx.fillStyle=pg; bgCtx.fill();
+      if(Math.random()>0.7){bgCtx.rotate(Math.PI/6);bgCtx.beginPath();bgCtx.ellipse(0,0,r*2.5,r*0.25,0,0,Math.PI*2);bgCtx.lineWidth=Math.max(0.5,r*0.15);bgCtx.strokeStyle='rgba(200,200,255,0.3)';bgCtx.stroke();}
       bgCtx.restore();
     }
+
+    // 7. BAKE vivid gameplay nebulae into static bg — ZERO runtime cost
+    const nebulaHues = [270, 220, 310, 200, 290, 340, 250, 180, 320, 240];
+    for (let i = 0; i < 55; i++) {
+      const nx = Math.random() * WORLD.WIDTH, ny = Math.random() * WORLD.HEIGHT;
+      const nr = random(150, 550);
+      const hue = nebulaHues[i % nebulaHues.length];
+      const alpha = random(0.08, 0.22);
+      bgCtx.globalAlpha = 1;
+      const ng = bgCtx.createRadialGradient(nx, ny, 0, nx, ny, nr);
+      ng.addColorStop(0, `hsla(${hue}, 75%, 45%, ${alpha})`);
+      ng.addColorStop(0.25, `hsla(${hue}, 65%, 30%, ${alpha * 0.65})`);
+      ng.addColorStop(0.6, `hsla(${hue}, 50%, 18%, ${alpha * 0.25})`);
+      ng.addColorStop(1, 'rgba(0,0,0,0)');
+      bgCtx.fillStyle = ng;
+      bgCtx.beginPath(); bgCtx.arc(nx, ny, nr, 0, Math.PI * 2); bgCtx.fill();
+    }
+    bgCtx.globalAlpha = 1;
     
     bgReady = true;
 
-    // 7. Parallax Animated Stars & Comets
-    for(let i=0; i<200; i++) {
-      animatedStars.push({
-        x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-        size: Math.random() * 2 + 1, speed: Math.random() * 0.5 + 0.1,
-        alpha: Math.random() * 0.8 + 0.2, type: 'star'
-      });
+    // 8. Animated Stars & Comets (reduced for performance)
+    const starCount = isMobile ? 50 : 120;
+    for(let i=0; i<starCount; i++) {
+      animatedStars.push({x:Math.random()*WORLD.WIDTH,y:Math.random()*WORLD.HEIGHT,size:Math.random()*2+1,speed:Math.random()*0.5+0.1,alpha:Math.random()*0.8+0.2,type:'star'});
     }
-    for(let i=0; i<12; i++) {
-      animatedStars.push({
-        x: Math.random() * WORLD.WIDTH, y: Math.random() * WORLD.HEIGHT,
-        speed: Math.random() * 4 + 3, angle: Math.random() * 0.4 + 0.2,
-        length: Math.random() * 120 + 60, alpha: Math.random() * 0.6 + 0.3, 
-        thickness: Math.random() * 2 + 1.5, type: 'comet'
-      });
-    }
-
-    // 8. Pre-compute in-game nebula positions (small/medium, optimized)
-    for (let i = 0; i < 40; i++) {
-      const hue = [270, 220, 310, 200, 290, 340][Math.floor(Math.random() * 6)];
-      gameNebulae.push({
-        x: Math.random() * WORLD.WIDTH,
-        y: Math.random() * WORLD.HEIGHT,
-        r: random(80, 280),
-        hue,
-        alpha: random(0.03, 0.08)
-      });
+    const cometCount = isMobile ? 3 : 7;
+    for(let i=0; i<cometCount; i++) {
+      animatedStars.push({x:Math.random()*WORLD.WIDTH,y:Math.random()*WORLD.HEIGHT,speed:Math.random()*4+3,angle:Math.random()*0.4+0.2,length:Math.random()*120+60,alpha:Math.random()*0.6+0.3,thickness:Math.random()*2+1.5,type:'comet'});
     }
   }
   initBackground();
 
   function drawAnimatedBackground() {
-    // 1. Draw huge static layer safely
+    // 1. Draw static bg layer (nebulae are baked in — zero cost)
     if (bgReady) {
-      const sx = Math.max(0, camera.x);
-      const sy = Math.max(0, camera.y);
-      const sw = Math.min(camera.width, bgCanvas.width - sx);
-      const sh = Math.min(camera.height, bgCanvas.height - sy);
-      if (sw > 0 && sh > 0) {
-        ctx.drawImage(bgCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
-      }
-    }
-
-    // 1b. In-game nebulae (lightweight, pre-computed positions)
-    if (!isMobile) {
-      for (let i = 0; i < gameNebulae.length; i++) {
-        const n = gameNebulae[i];
-        if (n.x + n.r < camera.x || n.x - n.r > camera.x + camera.width ||
-            n.y + n.r < camera.y || n.y - n.r > camera.y + camera.height) continue;
-        ctx.globalAlpha = n.alpha;
-        const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
-        g.addColorStop(0, `hsla(${n.hue}, 50%, 35%, 1)`);
-        g.addColorStop(0.6, `hsla(${n.hue}, 40%, 20%, 0.4)`);
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.globalAlpha = 1.0;
+      const sx = Math.max(0, camera.x) | 0;
+      const sy = Math.max(0, camera.y) | 0;
+      const sw = Math.min(camera.width, bgCanvas.width - sx) | 0;
+      const sh = Math.min(camera.height, bgCanvas.height - sy) | 0;
+      if (sw > 0 && sh > 0) ctx.drawImage(bgCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
     }
     
-    // 2. Parallax Animations (Optimized for mobile)
-    for (let i=0; i<animatedStars.length; i++) {
-      if (isMobile && i % 2 !== 0) continue;
+    // 2. Parallax animations (no gradients on mobile comets)
+    for (let i = 0; i < animatedStars.length; i++) {
       const s = animatedStars[i];
       if (s.type === 'comet') {
         s.x += Math.cos(s.angle) * s.speed;
         s.y += Math.sin(s.angle) * s.speed;
         if (s.x > WORLD.WIDTH + 200) { s.x = -200; s.y = Math.random() * WORLD.HEIGHT; }
         if (s.y > WORLD.HEIGHT + 200) { s.y = -200; s.x = Math.random() * WORLD.WIDTH; }
-        
-        const cx = s.x - camera.x * 0.3;
-        const cy = s.y - camera.y * 0.3;
-        
-        if (cx > -s.length - 20 && cx < camera.width + s.length + 20 && cy > -s.length - 20 && cy < camera.height + s.length + 20) {
-          ctx.save();
-          ctx.globalAlpha = s.alpha;
-          const grad = ctx.createLinearGradient(
-             camera.x + cx, camera.y + cy, 
-             camera.x + cx - Math.cos(s.angle) * s.length, camera.y + cy - Math.sin(s.angle) * s.length
-          );
-          grad.addColorStop(0, 'rgba(255, 220, 150, 1)');
-          grad.addColorStop(0.3, 'rgba(255, 100, 50, 0.5)');
-          grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = s.thickness;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(camera.x + cx, camera.y + cy);
-          ctx.lineTo(camera.x + cx - Math.cos(s.angle) * s.length, camera.y + cy - Math.sin(s.angle) * s.length);
-          ctx.stroke();
-          ctx.fillStyle = '#ffeedd';
-          ctx.shadowColor = '#ff6600';
-          ctx.shadowBlur = 15;
-          ctx.beginPath();
-          ctx.arc(camera.x + cx, camera.y + cy, s.thickness * 1.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+        const cx = s.x - camera.x * 0.3, cy = s.y - camera.y * 0.3;
+        if (cx > -s.length-20 && cx < camera.width+s.length+20 && cy > -s.length-20 && cy < camera.height+s.length+20) {
+          const wx = camera.x+cx, wy = camera.y+cy;
+          if (isMobile) {
+            // Simple line on mobile — no gradient, no shadow
+            ctx.globalAlpha = s.alpha * 0.7;
+            ctx.strokeStyle = '#ffcc80';
+            ctx.lineWidth = s.thickness;
+            ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx-Math.cos(s.angle)*s.length*0.5, wy-Math.sin(s.angle)*s.length*0.5); ctx.stroke();
+          } else {
+            ctx.globalAlpha = s.alpha;
+            ctx.strokeStyle = '#ffcc80';
+            ctx.lineWidth = s.thickness;
+            ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx-Math.cos(s.angle)*s.length, wy-Math.sin(s.angle)*s.length); ctx.stroke();
+            ctx.fillStyle = '#ffeedd';
+            ctx.beginPath(); ctx.arc(wx, wy, s.thickness*1.5, 0, Math.PI*2); ctx.fill();
+          }
         }
       } else {
-        const dx = s.x - camera.x * (1 - s.speed);
-        const dy = s.y - camera.y * (1 - s.speed);
+        const dx = s.x - camera.x*(1-s.speed), dy = s.y - camera.y*(1-s.speed);
         let px = dx % WORLD.WIDTH; if (px < 0) px += WORLD.WIDTH;
         let py = dy % WORLD.HEIGHT; if (py < 0) py += WORLD.HEIGHT;
-        
-        if (px > camera.x - 20 && px < camera.x + camera.width + 20 &&
-            py > camera.y - 20 && py < camera.y + camera.height + 20) {
+        if (px > camera.x-20 && px < camera.x+camera.width+20 && py > camera.y-20 && py < camera.y+camera.height+20) {
           ctx.globalAlpha = s.alpha * (0.5 + Math.sin(frame * 0.05 + i) * 0.5);
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(px, py, s.size, s.size);
@@ -776,8 +697,9 @@
      ========================================================= */
   function createParticles(x, y, color, amount) {
     // Optimization limit particle spam
-    if (isMobile) amount = Math.min(Math.floor(amount / 4), 3) || 1;
-    if (particles.length > 60) particles.length = 60;
+    if (isMobile) amount = Math.min(Math.floor(amount / 3), 2) || 1;
+    const maxP = isMobile ? 30 : 60;
+    if (particles.length > maxP) particles.length = maxP;
 
     for (let i = 0; i < amount; i++) {
       particles.push({
@@ -812,9 +734,8 @@
 
       ctx.globalAlpha = p.life;
       ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
+      const ps = p.size;
+      ctx.fillRect(p.x - ps, p.y - ps, ps * 2, ps * 2);
     }
     ctx.restore();
   }
@@ -823,6 +744,8 @@
      FLOATING TEXTS
      ========================================================= */
   function createFloatingText(x, y, text, color) {
+    const maxFT = isMobile ? 8 : 25;
+    if (floatingTexts.length >= maxFT) return;
     floatingTexts.push({ x, y, text, color, life: 1.0, dy: -1 });
   }
 
@@ -977,7 +900,7 @@
     }
 
     // PERFORMANCE: Limit total enemies on screen to prevent lag
-    const maxEnemies = isMobile ? 35 : 60;
+    const maxEnemies = isMobile ? 20 : 50;
     if (enemies.length >= maxEnemies) return;
 
     // Weighted spawning: harder enemies are rarer but difficulty increases their frequency
@@ -1495,29 +1418,46 @@
 
     // Helpers
     const hull = (path, c) => {
-      const g = ctx.createLinearGradient(0, -s, 0, s);
-      g.addColorStop(0, c || color);
-      g.addColorStop(0.5, '#1a1a2e');
-      g.addColorStop(1, c || color);
-      ctx.fillStyle = g;
-      ctx.strokeStyle = color;
-      ctx.fill(path);
-      ctx.stroke(path);
+      if (isMobile) {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.strokeStyle = color;
+        ctx.fill(path);
+        ctx.stroke(path);
+      } else {
+        const g = ctx.createLinearGradient(0, -s, 0, s);
+        g.addColorStop(0, c || color);
+        g.addColorStop(0.5, '#1a1a2e');
+        g.addColorStop(1, c || color);
+        ctx.fillStyle = g;
+        ctx.strokeStyle = color;
+        ctx.fill(path);
+        ctx.stroke(path);
+      }
     };
     const engine = (x, y, w, h) => {
-      const eg = ctx.createLinearGradient(x, y, x, y + h);
-      eg.addColorStop(0, '#4488ff');
-      eg.addColorStop(0.5, '#88ccff');
-      eg.addColorStop(1, 'rgba(100,180,255,0)');
-      ctx.fillStyle = eg;
-      ctx.fillRect(x, y, w, h);
+      if (isMobile) {
+        ctx.fillStyle = '#4488ff';
+        ctx.fillRect(x, y, w, h);
+      } else {
+        const eg = ctx.createLinearGradient(x, y, x, y + h);
+        eg.addColorStop(0, '#4488ff');
+        eg.addColorStop(0.5, '#88ccff');
+        eg.addColorStop(1, 'rgba(100,180,255,0)');
+        ctx.fillStyle = eg;
+        ctx.fillRect(x, y, w, h);
+      }
     };
     const cockpit = (x, y, r) => {
-      const cg = ctx.createRadialGradient(x, y - r*0.3, 0, x, y, r);
-      cg.addColorStop(0, '#aaddff');
-      cg.addColorStop(1, '#224466');
-      ctx.fillStyle = cg;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+      if (isMobile) {
+        ctx.fillStyle = '#224466';
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+      } else {
+        const cg = ctx.createRadialGradient(x, y - r*0.3, 0, x, y, r);
+        cg.addColorStop(0, '#aaddff');
+        cg.addColorStop(1, '#224466');
+        ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+      }
     };
 
     switch (type) {
@@ -1746,13 +1686,15 @@
 
       drawEnemyShape(e.type, e.size, e.color);
 
-      // Name label (small, above enemy)
-      ctx.rotate(-frame * 0.02 * (e.speed > 2.0 ? 2 : 1));
-      ctx.fillStyle = e.color;
-      ctx.globalAlpha = 0.5;
-      ctx.font = '8px Orbitron';
-      ctx.textAlign = 'center';
-      ctx.fillText(e.name, 0, -e.size - 8);
+      // Name label (skip on mobile for performance — text render is expensive)
+      if (!isMobile) {
+        ctx.rotate(-frame * 0.02 * (e.speed > 2.0 ? 2 : 1));
+        ctx.fillStyle = e.color;
+        ctx.globalAlpha = 0.5;
+        ctx.font = '8px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.fillText(e.name, 0, -e.size - 8);
+      }
       // Overlord Shield Visual
       if (e.name === 'Overlord') {
         const cycle = frame % 600;
@@ -1929,8 +1871,16 @@
     movePlayer();
     handleShooting();
 
-    for (const b of bullets) { b.x += b.dx; b.y += b.dy; }
-    bullets = bullets.filter((b) => b.x > 0 && b.x < WORLD.WIDTH && b.y > 0 && b.y < WORLD.HEIGHT);
+    // Bullets: update & in-place cull (no array allocation)
+    let bLen = bullets.length;
+    for (let bi = bLen - 1; bi >= 0; bi--) {
+      const b = bullets[bi];
+      b.x += b.dx; b.y += b.dy;
+      if (b.x < 0 || b.x > WORLD.WIDTH || b.y < 0 || b.y > WORLD.HEIGHT) {
+        bullets[bi] = bullets[--bLen];
+      }
+    }
+    bullets.length = bLen;
 
     spawnEnemies();
     updateEnemies();
