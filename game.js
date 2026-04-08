@@ -497,41 +497,157 @@
   /* =========================================================
      PROCEDURAL EPIC GALAXY BACKGROUND + ANIMATIONS
      ========================================================= */
-  const bgCanvas = document.createElement('canvas');
-  bgCanvas.width = WORLD.WIDTH;
-  bgCanvas.height = WORLD.HEIGHT;
-  const bgCtx = bgCanvas.getContext('2d', { alpha: false });
-  let bgReady = false;
-  
-  const animatedStars = [];
-  const gameNebulae = []; // Pre-computed nebula positions for in-game rendering
+  const ParallaxSpace = {
+    starsL1: [], starsL2: [], starsL3: [],
+    nebulae: [], planets: [],
+    nebulaSprites: [], planetSprites: [],
+    init() {
+      // 1. Pre-render Nebulae Sprites (Offscreen)
+      const hues = [280, 220, 310, 200, 240, 320];
+      for(let h of hues) {
+         const cv = document.createElement('canvas'); cv.width = 600; cv.height = 600;
+         const xctx = cv.getContext('2d');
+         const g = xctx.createRadialGradient(300,300,0, 300,300,300);
+         g.addColorStop(0, `hsla(${h}, 50%, 20%, 0.25)`);
+         g.addColorStop(0.4, `hsla(${h}, 30%, 15%, 0.1)`);
+         g.addColorStop(1, 'rgba(0,0,0,0)');
+         xctx.fillStyle = g; xctx.fillRect(0,0,600,600);
+         this.nebulaSprites.push(cv);
+      }
+      
+      // 2. Pre-render Planet Sprites
+      const pc = [
+        {c:'#34db8b',a:'#051e0f'},{c:'#e74c3c',a:'#1a0402'},
+        {c:'#9b59b6',a:'#140727'},{c:'#3498db',a:'#05121e'},
+        {c:'#f39c12',a:'#1c1000'}
+      ];
+      for (const clr of pc) {
+        // Simple planet
+        const cv1 = document.createElement('canvas'); cv1.width = 160; cv1.height = 160;
+        const ctx1 = cv1.getContext('2d');
+        const g1 = ctx1.createRadialGradient(60,60,0, 80,80,60);
+        g1.addColorStop(0, clr.c); g1.addColorStop(0.7, clr.a); g1.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx1.fillStyle = g1; ctx1.beginPath(); ctx1.arc(80,80,60,0,Math.PI*2); ctx1.fill();
+        this.planetSprites.push(cv1);
 
-  const gameBgImg = new Image();
+        // Planet with Rings
+        const cv2 = document.createElement('canvas'); cv2.width = 240; cv2.height = 240;
+        const ctx2 = cv2.getContext('2d');
+        const g2 = ctx2.createRadialGradient(100,100,0, 120,120,70);
+        g2.addColorStop(0, clr.c); g2.addColorStop(0.7, clr.a); g2.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx2.fillStyle = g2; ctx2.beginPath(); ctx2.arc(120,120,60,0,Math.PI*2); ctx2.fill();
+        ctx2.translate(120,120); ctx2.rotate(Math.PI/6);
+        ctx2.beginPath(); ctx2.ellipse(0, 0, 100, 20, 0, 0, Math.PI*2);
+        ctx2.strokeStyle = 'rgba(255,255,255,0.15)'; ctx2.lineWidth = 4; ctx2.stroke();
+        ctx2.beginPath(); ctx2.ellipse(0, 0, 85, 12, 0, 0, Math.PI*2);
+        ctx2.strokeStyle = `rgba(100, 150, 255, 0.3)`; ctx2.lineWidth = 2; ctx2.stroke();
+        ctx2.resetTransform();
+        this.planetSprites.push(cv2);
+      }
+
+      // 3. Populate Infinite Universe Grid
+      const W = WORLD.WIDTH, H = WORLD.HEIGHT;
+      // Level 1: Deep minimal stars
+      for(let i=0; i<3000; i++) this.starsL1.push({x: random(0, W*1.5), y: random(0, H*1.5), s: random(0.5, 1.0), a: random(0.2, 0.8)});
+      // Level 2: Mid bright stars
+      for(let i=0; i<800; i++) this.starsL2.push({x: random(0, W*1.2), y: random(0, H*1.2), s: random(1.5, 2.5), a: random(0.4, 1)});
+      // Level 3: Huge shining stars / distant suns
+      for(let i=0; i<60; i++) this.starsL3.push({x: random(0, W), y: random(0, H), s: random(2, 5), hue: [280, 200, 320, 180, 60][Math.floor(random(0,5))]});
+      // Nebulae clouds
+      for(let i=0; i<80; i++) this.nebulae.push({
+        x: random(0, W), y: random(0, H), 
+        scale: random(0.8, 2.5), sprite: Math.floor(random(0, this.nebulaSprites.length))
+      });
+      // Far Planets (smaller scales!)
+      for(let i=0; i<35; i++) this.planets.push({
+        x: random(0, W), y: random(0, H),
+        scale: random(0.2, 0.6), // Keep planets smallish so they look literally far away
+        sprite: Math.floor(random(0, this.planetSprites.length)),
+        parallax: random(0.15, 0.25) // Depth speed modifier
+      });
+    },
+
+    draw() {
+      // Deep Natural Space Background Color
+      ctx.fillStyle = '#010206'; 
+      ctx.fillRect(0,0, camera.width, camera.height);
+
+      // Wrapper to infinitely loop space chunks without boundaries
+      const wrap = (val, extent, parallax) => {
+         let p = (val - camera.x * parallax) % extent;
+         if (p < -600) p += extent; // wrap around boundary
+         return p;
+      };
+
+      // 1. Deep Nebulae (parallax ~ 0.05)
+      ctx.globalCompositeOperation = 'screen';
+      for(let n of this.nebulae) {
+         let nx = wrap(n.x, WORLD.WIDTH, 0.05);
+         let ny = wrap(n.y, WORLD.HEIGHT, 0.05);
+         let size = 600 * n.scale;
+         if (nx > -size/2 && nx < camera.width + size/2 && ny > -size/2 && ny < camera.height + size/2) {
+            ctx.drawImage(this.nebulaSprites[n.sprite], nx - size/2, ny - size/2, size, size);
+         }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+
+      // 2. Stars L1 (parallax ~ 0.1)
+      ctx.fillStyle = '#ffffff';
+      for(let s of this.starsL1) {
+         let px = wrap(s.x, WORLD.WIDTH*1.5, 0.1);
+         let py = wrap(s.y, WORLD.HEIGHT*1.5, 0.1);
+         if (px >= 0 && px <= camera.width && py >= 0 && py <= camera.height) {
+            ctx.globalAlpha = s.a; ctx.fillRect(px, py, s.s, s.s);
+         }
+      }
+
+      // 3. Planets (parallax ~ 0.15 - 0.25)
+      for(let p of this.planets) {
+         let px = wrap(p.x, WORLD.WIDTH, p.parallax);
+         let py = wrap(p.y, WORLD.HEIGHT, p.parallax);
+         let spr = this.planetSprites[p.sprite];
+         let w = spr.width * p.scale;
+         let h = spr.height * p.scale;
+         if (px > -w && px < camera.width + w && py > -h && py < camera.height + h) {
+             ctx.drawImage(spr, px - w/2, py - h/2, w, h);
+         }
+      }
+
+      // 4. Stars L2 (parallax ~ 0.3)
+      for(let s of this.starsL2) {
+         let px = wrap(s.x, WORLD.WIDTH*1.2, 0.3);
+         let py = wrap(s.y, WORLD.HEIGHT*1.2, 0.3);
+         if (px >= 0 && px <= camera.width && py >= 0 && py <= camera.height) {
+            ctx.globalAlpha = s.a; ctx.fillRect(px, py, s.s, s.s);
+         }
+      }
+
+      // 5. Giant Stars L3 (parallax ~ 0.4)
+      for(let s of this.starsL3) {
+         let px = wrap(s.x, WORLD.WIDTH, 0.4);
+         let py = wrap(s.y, WORLD.HEIGHT, 0.4);
+         if (px >= -50 && px <= camera.width+50 && py >= -50 && py <= camera.height+50) {
+            let flicker = 0.6 + Math.sin(frame*0.05 + s.x)*0.4;
+            ctx.globalAlpha = 0.5 * flicker;
+            let g = ctx.createRadialGradient(px, py, 0, px, py, s.s * 8);
+            g.addColorStop(0, `hsla(${s.hue}, 80%, 80%, 1)`);
+            g.addColorStop(0.3, `hsla(${s.hue}, 60%, 50%, 0.3)`);
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g; ctx.fillRect(px - s.s*8, py - s.s*8, s.s*16, s.s*16);
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(px,py, s.s*0.5, 0, Math.PI*2); ctx.fill();
+         }
+      }
+      ctx.globalAlpha = 1.0;
+    }
+  };
+
+  const animatedStars = []; // Kept for comets/shooting stars overlay
 
   function initBackground() {
-    bgCtx.fillStyle = '#03020a';
-    bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
+    ParallaxSpace.init();
 
-    if (gameBgImg.complete && gameBgImg.naturalWidth > 0) {
-      const pattern = bgCtx.createPattern(gameBgImg, 'repeat');
-      bgCtx.fillStyle = pattern;
-      bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
-    } else {
-      gameBgImg.onload = () => {
-        const pattern = bgCtx.createPattern(gameBgImg, 'repeat');
-        bgCtx.fillStyle = pattern;
-        bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
-      };
-      gameBgImg.src = 'game_bg_detailed.png'; // Load it after onload is set
-    }
-    
-    bgReady = true;
-
-    // 1. Animated Stars & Comets (reduced for performance)
-    const starCount = isMobile ? 50 : 120;
-    for(let i=0; i<starCount; i++) {
-      animatedStars.push({x:Math.random()*WORLD.WIDTH,y:Math.random()*WORLD.HEIGHT,size:Math.random()*2+1,speed:Math.random()*0.5+0.1,alpha:Math.random()*0.8+0.2,type:'star'});
-    }
+    // Comets overlay (moves independently of camera)
     const cometCount = isMobile ? 3 : 7;
     for(let i=0; i<cometCount; i++) {
       animatedStars.push({x:Math.random()*WORLD.WIDTH,y:Math.random()*WORLD.HEIGHT,speed:Math.random()*4+3,angle:Math.random()*0.4+0.2,length:Math.random()*120+60,alpha:Math.random()*0.6+0.3,thickness:Math.random()*2+1.5,type:'comet'});
@@ -540,16 +656,9 @@
   initBackground();
 
   function drawAnimatedBackground() {
-    // 1. Draw static bg layer (nebulae are baked in — zero cost)
-    if (bgReady) {
-      const sx = Math.max(0, camera.x) | 0;
-      const sy = Math.max(0, camera.y) | 0;
-      const sw = Math.min(camera.width, bgCanvas.width - sx) | 0;
-      const sh = Math.min(camera.height, bgCanvas.height - sy) | 0;
-      if (sw > 0 && sh > 0) ctx.drawImage(bgCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
-    }
+    ParallaxSpace.draw();
     
-    // 2. Parallax animations (no gradients on mobile comets)
+    // Parallax interactive overlay (Comets)
     for (let i = 0; i < animatedStars.length; i++) {
       const s = animatedStars[i];
       if (s.type === 'comet') {
@@ -561,7 +670,6 @@
         if (cx > -s.length-20 && cx < camera.width+s.length+20 && cy > -s.length-20 && cy < camera.height+s.length+20) {
           const wx = camera.x+cx, wy = camera.y+cy;
           if (isMobile) {
-            // Simple line on mobile — no gradient, no shadow
             ctx.globalAlpha = s.alpha * 0.7;
             ctx.strokeStyle = '#ffcc80';
             ctx.lineWidth = s.thickness;
@@ -575,15 +683,6 @@
             ctx.fillStyle = '#ffeedd';
             ctx.beginPath(); ctx.arc(wx, wy, s.thickness*1.5, 0, Math.PI*2); ctx.fill();
           }
-        }
-      } else {
-        const dx = s.x - camera.x*(1-s.speed), dy = s.y - camera.y*(1-s.speed);
-        let px = dx % WORLD.WIDTH; if (px < 0) px += WORLD.WIDTH;
-        let py = dy % WORLD.HEIGHT; if (py < 0) py += WORLD.HEIGHT;
-        if (px > camera.x-20 && px < camera.x+camera.width+20 && py > camera.y-20 && py < camera.y+camera.height+20) {
-          ctx.globalAlpha = s.alpha * (0.5 + Math.sin(frame * 0.05 + i) * 0.5);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(px, py, s.size, s.size);
         }
       }
     }

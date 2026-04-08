@@ -57,7 +57,7 @@
     <canvas id="menu-bg-canvas"></canvas>
     <h1 style="color: #00ffff;">SPACE DEFENDER</h1>
     
-    <div style="margin-bottom: 20px; background: rgba(0,255,255,0.05); padding: 20px; border-radius: 12px; width: 100%; max-width: 500px; display: flex; align-items: center; gap: 20px; border: 1px solid rgba(0,255,255,0.2);">
+    <div style="margin-bottom: 20px; background: rgba(5, 10, 20, 0.85); padding: 20px; border-radius: 12px; width: 100%; max-width: 500px; display: flex; align-items: center; gap: 20px; border: 1px solid rgba(0,255,255,0.3); box-shadow: 0 0 20px rgba(0,0,0,0.8);">
       <div id="preview-container" style="width: 100px; height: 100px; background: rgba(0,0,0,0.3); border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px dashed #00ffff;">
         <canvas id="skin-preview" width="80" height="80"></canvas>
       </div>
@@ -97,7 +97,7 @@
   <!-- Settings Menu -->
   <div id="settings-menu" class="overlay">
     <h1 style="color: #f1c40f;">⚙️ CONFIGURACIÓN</h1>
-    <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; width: 100%; max-width: 400px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px;">
+    <div style="background: rgba(5, 10, 20, 0.85); padding: 20px; border-radius: 10px; width: 100%; max-width: 400px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px; border: 1px solid rgba(0,255,255,0.3); box-shadow: 0 0 20px rgba(0,0,0,0.8);">
       <label style="display: flex; align-items: center; justify-content: space-between; font-size: 1.2rem; cursor: pointer;">
         <span>🔊 Efectos de Sonido</span>
         <input type="checkbox" id="sound-toggle" checked style="width: 25px; height: 25px;" onchange="toggleSound()">
@@ -116,7 +116,7 @@
   <!-- History Menu -->
   <div id="history-menu" class="overlay">
     <h1 style="color: #00ffff;">📜 HISTORIAL DE MISIONES</h1>
-    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; width: 100%; max-width: 600px; max-height: 60vh; overflow-y: auto; margin-bottom: 20px;">
+    <div style="background: rgba(5, 10, 20, 0.85); padding: 15px; border-radius: 12px; width: 100%; max-width: 600px; max-height: 60vh; overflow-y: auto; margin-bottom: 20px; border: 1px solid rgba(0,255,255,0.3); box-shadow: 0 0 20px rgba(0,0,0,0.8);">
       <table class="records-table" style="max-width: none;">
         <thead>
           <tr>
@@ -320,7 +320,7 @@
     const mctx = mc.getContext('2d');
     let mStars = [], mComets = [];
     const menuBgImg = new Image();
-    menuBgImg.src = 'menu_bg_colorful.png';
+    menuBgImg.src = 'game_bg_detailed.png';
 
     function mResize() { mc.width = window.innerWidth; mc.height = window.innerHeight; }
     window.addEventListener('resize', mResize); mResize();
@@ -360,7 +360,9 @@
         const offsetX = (mc.width - finalW) / 2;
         const offsetY = (mc.height - finalH) / 2;
 
+        mctx.globalAlpha = 0.55; // Dim the background naturally
         mctx.drawImage(menuBgImg, offsetX, offsetY, finalW, finalH);
+        mctx.globalAlpha = 1.0;
       }
       // Stars
       for(const st of mStars){
