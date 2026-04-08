@@ -3,7 +3,7 @@
    Offline-first: caches ALL assets including skins & fonts
    ========================================================= */
 
-const CACHE_VERSION = 'space-defender-v11';
+const CACHE_VERSION = 'space-defender-v12';
 const STATIC_ASSETS = [
   './',
   './juego.html',
@@ -19,6 +19,8 @@ const STATIC_ASSETS = [
   './space_bg.png',
   './game_bg_detailed.png',
   './menu_bg_colorful.png',
+  './nebula_1.png',
+  './nebula_2.png',
   './sw.js'
 ];
 
