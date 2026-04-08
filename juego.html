@@ -318,7 +318,10 @@
     const mc = document.getElementById('menu-bg-canvas');
     if (!mc) return;
     const mctx = mc.getContext('2d');
-    let mStars = [], mNebulae = [], mComets = [];
+    let mStars = [], mComets = [];
+    const menuBgImg = new Image();
+    menuBgImg.src = 'menu_bg_colorful.png';
+
     function mResize() { mc.width = window.innerWidth; mc.height = window.innerHeight; }
     window.addEventListener('resize', mResize); mResize();
     // Stars — multi-colored
@@ -328,42 +331,37 @@
       if(roll<0.12){r=160;g=190;b=255;}else if(roll<0.24){r=230;g=170;b=255;}else if(roll<0.34){r=255;g=170;b=210;}else if(roll<0.42){r=255;g=210;b=160;}
       mStars.push({x:Math.random()*3000,y:Math.random()*2000,s:Math.random()*2.5+0.5,a:Math.random()*0.9+0.1,sp:Math.random()*0.25+0.03,ph:Math.random()*Math.PI*2,r,g,b});
     }
-    // Large vivid nebulae — much bigger and more saturated
-    const nebHues = [270, 210, 320, 190, 340, 240, 290, 230, 300, 180, 260, 310];
-    for (let i=0;i<12;i++){
-      const w = mc.width||1920, h = mc.height||1080;
-      mNebulae.push({
-        x: Math.random()*0.9+0.05, y: Math.random()*0.9+0.05,
-        r: Math.random()*280+180,
-        hue: nebHues[i],
-        a: Math.random()*0.12+0.06,
-        dx: (Math.random()-0.5)*0.08,
-        dy: (Math.random()-0.5)*0.08
-      });
-    }
+
     for(let i=0;i<4;i++){
       mComets.push({x:Math.random()*(mc.width||1920),y:Math.random()*(mc.height||1080),sp:Math.random()*1.5+1,ang:Math.random()*0.5+0.1,len:Math.random()*100+50,a:Math.random()*0.5+0.3});
     }
     let mFrame=0;
     function mDraw(){
       if(!document.getElementById('start-menu').classList.contains('active')){requestAnimationFrame(mDraw);return;}
-      mctx.fillStyle='#02010a';mctx.fillRect(0,0,mc.width,mc.height);
-      // Nebulae — large, vivid, slowly drifting
-      for(const n of mNebulae){
-        n.x+=n.dx*0.0002; n.y+=n.dy*0.0002;
-        if(n.x<-0.1)n.x=1.1; if(n.x>1.1)n.x=-0.1;
-        if(n.y<-0.1)n.y=1.1; if(n.y>1.1)n.y=-0.1;
-        const nx=n.x*mc.width, ny=n.y*mc.height;
-        const pulse = n.a + Math.sin(mFrame*0.006+n.hue)*0.025;
-        mctx.globalAlpha=pulse;
-        const g=mctx.createRadialGradient(nx,ny,0,nx,ny,n.r);
-        g.addColorStop(0,`hsla(${n.hue},80%,45%,1)`);
-        g.addColorStop(0.3,`hsla(${n.hue},70%,30%,0.7)`);
-        g.addColorStop(0.6,`hsla(${n.hue},55%,18%,0.3)`);
-        g.addColorStop(1,'rgba(0,0,0,0)');
-        mctx.fillStyle=g;mctx.beginPath();mctx.arc(nx,ny,n.r,0,Math.PI*2);mctx.fill();
+      
+      if (menuBgImg.complete && menuBgImg.naturalWidth > 0) {
+        // Full screen scale with preservation
+        const imgRatio = menuBgImg.width / menuBgImg.height;
+        const canvasRatio = mc.width / mc.height;
+        let drawW = mc.width;
+        let drawH = mc.height;
+        if (canvasRatio > imgRatio) {
+            drawH = mc.width / imgRatio;
+        } else {
+            drawW = mc.height * imgRatio;
+        }
+        
+        const offsetX = (mc.width - drawW) / 2;
+        const offsetY = (mc.height - drawH) / 2;
+        
+        // Slight parallax float effect
+        const dX = Math.sin(mFrame * 0.002) * 50;
+        const dY = Math.cos(mFrame * 0.002) * 50;
+
+        mctx.drawImage(menuBgImg, offsetX + dX, offsetY + dY, drawW, drawH);
+      } else {
+        mctx.fillStyle='#02010a';mctx.fillRect(0,0,mc.width,mc.height);
       }
-      mctx.globalAlpha=1;
       // Stars
       for(const st of mStars){
         const px=(st.x+mFrame*st.sp*0.4)%mc.width;
