@@ -507,22 +507,22 @@
   const gameNebulae = []; // Pre-computed nebula positions for in-game rendering
 
   const gameBgImg = new Image();
-  gameBgImg.src = 'game_bg_detailed.png';
 
   function initBackground() {
     bgCtx.fillStyle = '#03020a';
     bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
 
-    const drawPattern = () => {
+    if (gameBgImg.complete && gameBgImg.naturalWidth > 0) {
       const pattern = bgCtx.createPattern(gameBgImg, 'repeat');
       bgCtx.fillStyle = pattern;
       bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
-    };
-
-    if (gameBgImg.complete && gameBgImg.naturalWidth > 0) {
-      drawPattern();
     } else {
-      gameBgImg.onload = drawPattern;
+      gameBgImg.onload = () => {
+        const pattern = bgCtx.createPattern(gameBgImg, 'repeat');
+        bgCtx.fillStyle = pattern;
+        bgCtx.fillRect(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
+      };
+      gameBgImg.src = 'game_bg_detailed.png'; // Load it after onload is set
     }
     
     bgReady = true;
@@ -1989,6 +1989,9 @@
     countEl.style.display = 'block';
     let count = seconds;
     countEl.innerText = count;
+    countEl.classList.remove('countdown-anim');
+    void countEl.offsetWidth; // Reflow
+    countEl.classList.add('countdown-anim');
     let lastTick = performance.now();
 
     function countdownStep(now) {
@@ -2003,6 +2006,9 @@
           return;
         }
         countEl.innerText = count;
+        countEl.classList.remove('countdown-anim');
+        void countEl.offsetWidth; // Reflow
+        countEl.classList.add('countdown-anim');
       }
       countdownRAF = requestAnimationFrame(countdownStep);
     }

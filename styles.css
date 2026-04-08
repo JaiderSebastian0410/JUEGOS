@@ -178,14 +178,28 @@ canvas { display: block; }
 
 /* ---- Countdown ---- */
 #countdown {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   font-family: 'Orbitron', sans-serif;
-  font-size: clamp(4rem, 12vw, 8rem);
-  color: cyan;
-  text-shadow: 0 0 30px cyan;
+  font-size: clamp(8rem, 20vw, 15rem);
+  color: #fff;
+  text-shadow: 0 0 40px cyan, 0 0 80px #00ffff;
   pointer-events: none;
   display: none;
-  position: absolute;
-  z-index: 20;
+  z-index: 200;
+}
+
+.countdown-anim {
+  animation: countdownPop 1s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes countdownPop {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; filter: blur(10px); }
+  30% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; filter: blur(0px); }
+  70% { transform: translate(-50%, -50%) scale(1); opacity: 1; filter: blur(0px); }
+  100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; filter: blur(15px); }
 }
 
 /* ---- Bottom HUD ---- */

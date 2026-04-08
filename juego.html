@@ -339,6 +339,7 @@
     function mDraw(){
       if(!document.getElementById('start-menu').classList.contains('active')){requestAnimationFrame(mDraw);return;}
       
+      mctx.fillStyle='#02010a';mctx.fillRect(0,0,mc.width,mc.height);
       if (menuBgImg.complete && menuBgImg.naturalWidth > 0) {
         // Full screen scale with preservation
         const imgRatio = menuBgImg.width / menuBgImg.height;
@@ -351,16 +352,15 @@
             drawW = mc.height * imgRatio;
         }
         
-        const offsetX = (mc.width - drawW) / 2;
-        const offsetY = (mc.height - drawH) / 2;
+        // Slow cinematic zoom instead of pan to avoid edge tearing
+        const zoom = 1.0 + (Math.sin(mFrame * 0.0005) * 0.05 + 0.05); // 1.0 to 1.1 scale
+        const finalW = drawW * zoom;
+        const finalH = drawH * zoom;
         
-        // Slight parallax float effect
-        const dX = Math.sin(mFrame * 0.002) * 50;
-        const dY = Math.cos(mFrame * 0.002) * 50;
+        const offsetX = (mc.width - finalW) / 2;
+        const offsetY = (mc.height - finalH) / 2;
 
-        mctx.drawImage(menuBgImg, offsetX + dX, offsetY + dY, drawW, drawH);
-      } else {
-        mctx.fillStyle='#02010a';mctx.fillRect(0,0,mc.width,mc.height);
+        mctx.drawImage(menuBgImg, offsetX, offsetY, finalW, finalH);
       }
       // Stars
       for(const st of mStars){
