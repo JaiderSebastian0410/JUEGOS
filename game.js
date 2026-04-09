@@ -541,25 +541,25 @@
       // 3. Populate Infinite Universe Grid
       const W = WORLD.WIDTH, H = WORLD.HEIGHT;
       // Level 1: Deep minimal stars
-      for(let i=0; i<3000; i++) this.starsL1.push({x: random(0, W*1.5), y: random(0, H*1.5), s: random(0.5, 1.0), a: random(0.2, 0.8)});
+      for(let i=0; i<6000; i++) this.starsL1.push({x: random(0, W*1.5), y: random(0, H*1.5), s: random(0.5, 1.2), a: random(0.3, 0.9)});
       // Level 2: Mid bright stars
-      for(let i=0; i<800; i++) this.starsL2.push({x: random(0, W*1.2), y: random(0, H*1.2), s: random(1.5, 2.5), a: random(0.4, 1)});
+      for(let i=0; i<2000; i++) this.starsL2.push({x: random(0, W*1.2), y: random(0, H*1.2), s: random(1.5, 2.8), a: random(0.5, 1)});
       // Level 3: Huge shining stars / distant suns
-      for(let i=0; i<60; i++) this.starsL3.push({x: random(0, W), y: random(0, H), s: random(2, 5), hue: [280, 200, 320, 180, 60][Math.floor(random(0,5))]});
-      // Nebulae clouds
-      for(let i=0; i<40; i++) this.nebulae.push({
+      for(let i=0; i<200; i++) this.starsL3.push({x: random(0, W), y: random(0, H), s: random(2, 5), hue: [280, 200, 320, 180, 60][Math.floor(random(0,5))]});
+      // Nebulae clouds (reduce count, alpha and scale so they don't dominate)
+      for(let i=0; i<15; i++) this.nebulae.push({
         x: random(0, W), y: random(0, H), 
-        scale: random(0.8, 1.8),
+        scale: random(0.5, 1.1),
         angle: random(0, Math.PI*2),
-        alpha: random(0.3, 0.7),
+        alpha: random(0.15, 0.35),
         spriteIdx: Math.floor(random(0, nebulaImages.length))
       });
-      // Far Planets (smaller scales!)
-      for(let i=0; i<35; i++) this.planets.push({
+      // Far Planets (substantially more planets, and slightly larger)
+      for(let i=0; i<150; i++) this.planets.push({
         x: random(0, W), y: random(0, H),
-        scale: random(0.2, 0.6), // Keep planets smallish so they look literally far away
+        scale: random(0.4, 0.95), 
         sprite: Math.floor(random(0, this.planetSprites.length)),
-        parallax: random(0.15, 0.25) // Depth speed modifier
+        parallax: random(0.10, 0.30) 
       });
     },
 
