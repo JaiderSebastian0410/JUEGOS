@@ -534,23 +534,37 @@
         this.nebulaSprites.push(c);
       }
 
-      // 3. Procedural Hub Galaxies (Small/Medium)
+      // 3. Procedural Hub Galaxies (Diverse Variety)
       this.galaxySprites = [];
-      const galHues = [220, 340, 40, 200];
-      for (const h of galHues) {
+      const galHues = [220, 340, 40, 200, 280, 180];
+      for (let k=0; k<galHues.length; k++) {
         const c = document.createElement('canvas'); c.width=600; c.height=600;
         const x = c.getContext('2d');
+        const h = galHues[k];
         x.translate(300, 300); x.rotate(random(0, Math.PI));
-        const g = x.createRadialGradient(0,0,0, 0,0,150);
-        g.addColorStop(0, '#fff'); g.addColorStop(0.3, `hsla(${h}, 100%, 70%, 0.6)`); g.addColorStop(1, 'rgba(0,0,0,0)');
-        x.fillStyle = g; x.beginPath(); x.ellipse(0,0,300,60,0,0,Math.PI*2); x.fill();
-        // Arms
-        x.globalCompositeOperation = 'screen';
-        for(let i=0; i<800; i++){
-          const angle = i * 0.02; const r = angle * 20;
-          x.fillStyle = `hsla(${h+random(-20,20)}, 80%, 60%, ${random(0.1, 0.4)})`;
-          x.beginPath(); x.arc(Math.cos(angle)*r, Math.sin(angle)*r, random(1,3), 0, Math.PI*2); x.fill();
-          x.beginPath(); x.arc(-Math.cos(angle)*r, -Math.sin(angle)*r, random(1,3), 0, Math.PI*2); x.fill();
+        
+        if (k % 3 === 0) { // Spiral Hub
+          const g = x.createRadialGradient(0,0,0, 0,0,150);
+          g.addColorStop(0, '#fff'); g.addColorStop(0.3, `hsla(${h}, 100%, 70%, 0.6)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+          x.fillStyle = g; x.beginPath(); x.ellipse(0,0,250,50,0,0,Math.PI*2); x.fill();
+          x.globalCompositeOperation = 'screen';
+          for(let i=0; i<600; i++){
+            const angle = i * 0.02; const r = angle * 18;
+            x.fillStyle = `hsla(${h+random(-20,20)}, 80%, 60%, ${random(0.1, 0.4)})`;
+            x.beginPath(); x.arc(Math.cos(angle)*r, Math.sin(angle)*r, random(1,2), 0, Math.PI*2); x.fill();
+            x.beginPath(); x.arc(-Math.cos(angle)*r, -Math.sin(angle)*r, random(1,2), 0, Math.PI*2); x.fill();
+          }
+        } else if (k % 3 === 1) { // Elliptical Glow
+          const g = x.createRadialGradient(0,0,0, 0,0,200);
+          g.addColorStop(0, '#fff'); g.addColorStop(0.4, `hsla(${h}, 90%, 60%, 0.5)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+          x.fillStyle = g; x.beginPath(); x.ellipse(0,0,200,160,0,0,Math.PI*2); x.fill();
+        } else { // Barred / Sombrero
+          x.fillStyle = '#fff'; x.beginPath(); x.arc(0,0,10,0,Math.PI*2); x.fill();
+          const g = x.createLinearGradient(-250,0,250,0);
+          g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(0.5, `hsla(${h}, 100%, 70%, 0.4)`); g.addColorStop(1,'rgba(0,0,0,0)');
+          x.fillStyle=g; x.fillRect(-250,-15,500,30);
+          x.beginPath(); x.ellipse(0,0,250,40,0,0,Math.PI*2);
+          x.strokeStyle = `hsla(${h}, 80%, 80%, 0.2)`; x.lineWidth=4; x.stroke();
         }
         this.galaxySprites.push(c);
       }
@@ -606,34 +620,34 @@
       this.starsL1 = []; this.starsL2 = []; this.starsL3 = [];
       this.nebulae = []; this.planets = []; this.galaxies = [];
 
-      // HIGH STAR DENSITY
-      for(let i=0; i<14000; i++) this.starsL1.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.4, 0.9), a: random(0.2, 0.6), p: 0.08});
-      for(let i=0; i<5000; i++) this.starsL2.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(1.0, 2.2), a: random(0.4, 0.9), p: 0.22});
-      for(let i=0; i<500; i++) this.starsL3.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(2, 5), hue: [200, 210, 320, 180, 60][Math.floor(random(0,5))], p: 0.4});
+      // HIGH STAR DENSITY (Increased parallax for 'flicker' speed)
+      for(let i=0; i<15000; i++) this.starsL1.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.3, 0.8), a: random(0.2, 0.5), p: 0.12});
+      for(let i=0; i<6000; i++) this.starsL2.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.8, 1.8), a: random(0.4, 0.8), p: 0.28});
+      for(let i=0; i<600; i++) this.starsL3.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(1.5, 3), hue: [200, 210, 320, 180, 60][Math.floor(random(0,5))], p: 0.45});
       
-      // Galaxies
-      for(let i=0; i<50; i++) this.galaxies.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.1, 0.5), angle: random(0, Math.PI*2), alpha: random(0.4, 0.8),
-        spriteIdx: Math.floor(random(0, this.galaxySprites.length)), p: 0.02
+      // Small/Medium Galaxies (Increased Count)
+      for(let i=0; i<80; i++) this.galaxies.push({
+        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.06, 0.22), angle: random(0, Math.PI*2), alpha: random(0.3, 0.7),
+        spriteIdx: Math.floor(random(0, this.galaxySprites.length)), p: 0.025
       });
 
-      // Nebulae (Assets + Artistic)
-      for(let i=0; i<30; i++) this.nebulae.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.8, 2.2), angle: random(0, Math.PI*2), alpha: random(0.1, 0.25),
-        assetIdx: Math.floor(random(0, nebulaImages.length)), isAsset: true, p: 0.05
+      // Nebulae (Smaller Assets + More mini-artistic nebulae)
+      for(let i=0; i<40; i++) this.nebulae.push({
+        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.15, 0.45), angle: random(0, Math.PI*2), alpha: random(0.12, 0.3),
+        assetIdx: Math.floor(random(0, nebulaImages.length)), isAsset: true, p: 0.06
       });
-      for(let i=0; i<50; i++) this.nebulae.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.4, 1.2), angle: random(0, Math.PI*2), alpha: random(0.15, 0.35),
-        spriteIdx: Math.floor(random(0, this.nebulaSprites.length)), isAsset: false, p: 0.04
+      for(let i=0; i<140; i++) this.nebulae.push({
+        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.1, 0.35), angle: random(0, Math.PI*2), alpha: random(0.15, 0.45),
+        spriteIdx: Math.floor(random(0, this.nebulaSprites.length)), isAsset: false, p: 0.05
       });
       
-      // Planets (Original scale, reduced rings)
-      for(let i=0; i<200; i++) {
+      // Planets (Small/Mini scale, boosted parallax for speed feel)
+      for(let i=0; i<250; i++) {
         let isRing = Math.random() < 0.2;
         let colorIdx = Math.floor(random(0, pc.length));
         this.planets.push({
-          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.35, 0.8), 
-          sprite: (colorIdx * 2) + (isRing ? 1 : 0), p: random(0.12, 0.35) 
+          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.12, 0.4), 
+          sprite: (colorIdx * 2) + (isRing ? 1 : 0), p: random(0.20, 0.55) 
         });
       }
     },
@@ -658,7 +672,7 @@
       for(let n of this.nebulae) {
          let spr = n.isAsset ? assetNebs[n.assetIdx] : this.nebulaSprites[n.spriteIdx];
          if (n.isAsset && (!spr.complete || spr.naturalWidth === 0)) continue;
-         let base = n.isAsset ? 1000 : 600;
+         let base = n.isAsset ? 500 : 600; // Drastically reduced asset base size
          let w = base * n.scale, h = base * n.scale;
          let dx = n.x + camera.x * (1 - n.p); let dy = n.y + camera.y * (1 - n.p);
          if (dx > cL - w && dx < cR + w && dy > cT - h && dy < cB + h) {
