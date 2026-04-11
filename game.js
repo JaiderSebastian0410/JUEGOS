@@ -615,30 +615,42 @@
       for(let i=0; i<300; i++) this.starsL3.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(2, 5), hue: [280, 200, 320, 180, 60][Math.floor(random(0,5))], p: 0.4});
       
       // Nebulae clouds (very dense and spread everywhere absolutely)
-      for(let i=0; i<100; i++) {
+      for(let i=0; i<80; i++) {
         this.nebulae.push({
           x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), 
-          scale: random(0.8, 2.2), angle: random(0, Math.PI*2), alpha: random(0.15, 0.45),
+          scale: random(1.0, 3.0), angle: random(0, Math.PI*2), alpha: random(0.08, 0.22),
           spriteIdx: Math.floor(random(0, this.nebulaSprites.length)),
           p: 0.05
         });
       }
       
-      // Galaxies! Layered extremely deep
-      for(let i=0; i<40; i++) {
+      // Asset-based Nebulae (Original assets nebula_1.png and nebula_2.png)
+      const assetNebs = [imgNebula1, imgNebula2];
+      for(let i=0; i<25; i++) {
+         this.nebulae.push({
+           x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y),
+           scale: random(1.2, 3.5), angle: random(0, Math.PI*2), alpha: random(0.12, 0.3),
+           isAsset: true,
+           assetIdx: Math.floor(random(0, assetNebs.length)),
+           p: 0.04
+         });
+      }
+      
+      // Galaxies! Layered extremely deep - SCALED DOWN for distant feel
+      for(let i=0; i<50; i++) {
          this.galaxies.push({
             x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y),
             spriteIdx: Math.floor(random(0, this.galaxySprites.length)),
-            scale: random(0.8, 3.5), angle: random(0, Math.PI*2), alpha: random(0.4, 0.9),
+            scale: random(0.2, 0.7), angle: random(0, Math.PI*2), alpha: random(0.3, 0.7),
             p: 0.02
          });
       }
 
-      // Far Planets (substantially more planets, absolutely spread everywhere)
-      for(let i=0; i<250; i++) {
+      // Far Planets (substantially more planets, absolutely spread everywhere) - SCALED DOWN
+      for(let i=0; i<300; i++) {
         this.planets.push({
           x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y),
-          scale: random(0.4, 1.2), sprite: Math.floor(random(0, this.planetSprites.length)),
+          scale: random(0.12, 0.45), sprite: Math.floor(random(0, this.planetSprites.length)),
           p: random(0.10, 0.35) 
         });
       }
@@ -665,10 +677,14 @@
          }
       }
 
-      // 1. Procedural Nebulae (parallax 0.05)
+      // 1. Procedural + Asset Nebulae (parallax 0.04 - 0.05)
+      const assetNebs = [imgNebula1, imgNebula2];
       for(let n of this.nebulae) {
-         let spr = this.nebulaSprites[n.spriteIdx];
-         let w = spr.width * n.scale, h = spr.height * n.scale;
+         let spr = n.isAsset ? assetNebs[n.assetIdx] : this.nebulaSprites[n.spriteIdx];
+         if (n.isAsset && (!spr.complete || spr.naturalWidth === 0)) continue;
+         
+         let baseSize = n.isAsset ? 1000 : 600;
+         let w = baseSize * n.scale, h = baseSize * n.scale;
          let drawX = n.x + camera.x * (1 - n.p);
          let drawY = n.y + camera.y * (1 - n.p);
          if (drawX > cL - w && drawX < cR + w && drawY > cT - h && drawY < cB + h) {
