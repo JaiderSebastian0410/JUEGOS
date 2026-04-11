@@ -501,188 +501,160 @@
   const imgNebula2 = new Image(); imgNebula2.src = 'nebula_2.png';
 
   const ParallaxSpace = {
-    starsL1: [], starsL2: [], starsL3: [],
+    starsL1: [], starsL2: [], starsL3: [], starsL4: [], // L4 is fast foreground dust
     nebulae: [], planets: [], galaxies: [],
     planetSprites: [], galaxySprites: [], nebulaSprites: [],
     init() {
-      // 1. Procedural Nebulae fallback (colorful gas clouds)
-      for (let k=0; k<5; k++) {
+      // 1. Procedural Nebulae (Very subtle, varied gases)
+      this.nebulaSprites = [];
+      for (let k=0; k<6; k++) {
         const c = document.createElement('canvas'); c.width=600; c.height=600;
         const x = c.getContext('2d');
-        const hues = [300, 200, 340, 180, 260];
+        const hues = [280, 200, 310, 190, 240, 350];
         const g = x.createRadialGradient(300,300,0, 300,300,300);
-        g.addColorStop(0, `hsla(${hues[k]}, 80%, 40%, 0.8)`);
-        g.addColorStop(0.4, `hsla(${hues[k]+30}, 70%, 20%, 0.4)`);
+        g.addColorStop(0, `hsla(${hues[k]}, 80%, 30%, 0.6)`);
+        g.addColorStop(0.5, `hsla(${hues[k]+40}, 60%, 10%, 0.2)`);
         g.addColorStop(1, 'rgba(0,0,0,0)');
-        x.fillStyle = g;
-        x.beginPath(); x.ellipse(300, 300, 300, random(150, 250), random(0, Math.PI), 0, Math.PI*2); x.fill();
+        x.fillStyle = g; x.beginPath(); x.ellipse(300, 300, random(200, 300), random(100, 200), random(0, Math.PI), 0, Math.PI*2); x.fill();
         this.nebulaSprites.push(c);
       }
 
-      // 2. Procedural Galaxies
+      // 2. Procedural Galaxies (Small, distant hubs)
+      this.galaxySprites = [];
       for (let k=0; k<4; k++) {
         const c = document.createElement('canvas'); c.width=800; c.height=800;
         const x = c.getContext('2d');
-        const hue = [200, 320, 40, 280][k];
-        x.translate(400, 400);
-        x.rotate(random(0, Math.PI));
-        
-        // Core
-        const g = x.createRadialGradient(0,0,0, 0,0,200);
-        g.addColorStop(0, '#fff'); g.addColorStop(0.2, `hsla(${hue}, 100%, 70%, 0.8)`); g.addColorStop(1, 'rgba(0,0,0,0)');
-        x.fillStyle = g; x.beginPath(); x.ellipse(0,0,400,100,0,0,Math.PI*2); x.fill();
-        
-        // Spiral Arms
+        const hue = [210, 330, 260, 180][k];
+        x.translate(400, 400); x.rotate(random(0, Math.PI));
+        const g = x.createRadialGradient(0,0,0, 0,0,150);
+        g.addColorStop(0, '#fff'); g.addColorStop(0.2, `hsla(${hue}, 100%, 70%, 0.6)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+        x.fillStyle = g; x.beginPath(); x.ellipse(0,0,300,60,0,0,Math.PI*2); x.fill();
         x.globalCompositeOperation = 'screen';
-        for(let a=0; a<2000; a++) {
-          const angle = a * 0.01;
-          const r = angle * 25 + random(-20, 20);
-          const px = Math.cos(angle) * r;
-          const py = Math.sin(angle) * r;
-          x.fillStyle = `hsla(${hue + random(-20, 20)}, 80%, 60%, ${random(0.1, 0.4)})`;
-          x.beginPath(); x.arc(px, py, random(1, 4), 0, Math.PI*2); x.fill();
-          // Opposite arm
-          x.beginPath(); x.arc(-px, -py, random(1, 4), 0, Math.PI*2); x.fill();
+        for(let a=0; a<1200; a++) {
+          const angle = a * 0.02; const r = angle * 22;
+          const px = Math.cos(angle) * r; const py = Math.sin(angle) * r;
+          x.fillStyle = `hsla(${hue + random(-30, 30)}, 90%, 60%, ${random(0.1, 0.4)})`;
+          x.beginPath(); x.arc(px, py, random(1, 3), 0, Math.PI*2); x.fill();
+          x.beginPath(); x.arc(-px, -py, random(1, 3), 0, Math.PI*2); x.fill();
         }
         this.galaxySprites.push(c);
       }
       
-      // 3. Pre-render Planet Sprites with Textures!
+      // 3. Pre-render Realistic Planet Sprites (Smaller, darker, rare rings)
+      this.planetSprites = [];
       const pc = [
-        {c:'#34db8b',a:'#051e0f'},{c:'#e74c3c',a:'#1a0402'},
-        {c:'#9b59b6',a:'#140727'},{c:'#3498db',a:'#05121e'},
-        {c:'#f39c12',a:'#1c1000'}, {c:'#1abc9c',a:'#001111'},
-        {c:'#e84393',a:'#110011'}
+        {c:'#2ecc71',a:'#0a1a10'},{c:'#e74c3c',a:'#1a0505'},
+        {c:'#9b59b6',a:'#100a1a'},{c:'#3498db',a:'#0a101a'},
+        {c:'#f39c12',a:'#1a100a'},{c:'#1abc9c',a:'#051a1a'}
       ];
       for (const clr of pc) {
-        // High quality planet with craters/texture
-        const cv1 = document.createElement('canvas'); cv1.width = 240; cv1.height = 240;
+        // High quality planet (Standard)
+        const cv1 = document.createElement('canvas'); cv1.width = 160; cv1.height = 160;
         const ctx1 = cv1.getContext('2d');
-        const g1 = ctx1.createRadialGradient(90,90,0, 120,120,100);
+        const g1 = ctx1.createRadialGradient(50,50,0, 80,80,75);
         g1.addColorStop(0, clr.c); g1.addColorStop(0.7, clr.a); g1.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx1.fillStyle = g1; ctx1.beginPath(); ctx1.arc(120,120,100,0,Math.PI*2); ctx1.fill();
-        
-        // Texture overlay (craters and noise)
-        ctx1.save();
-        ctx1.beginPath(); ctx1.arc(120,120,100,0,Math.PI*2); ctx1.clip();
-        ctx1.fillStyle = 'rgba(0,0,0,0.15)';
-        for(let j=0; j<15; j++) {
-            ctx1.beginPath(); 
-            ctx1.arc(random(40, 200), random(40, 200), random(5, 25), 0, Math.PI*2); 
-            ctx1.fill(); 
-        }
-        // Atmospheric glow edge
-        ctx1.strokeStyle = `rgba(255,255,255,0.2)`; ctx1.lineWidth=4;
-        ctx1.beginPath(); ctx1.arc(120,120,96,0,Math.PI*2); ctx1.stroke();
+        ctx1.fillStyle = g1; ctx1.beginPath(); ctx1.arc(80,80,75,0,Math.PI*2); ctx1.fill();
+        // Texture
+        ctx1.save(); ctx1.beginPath(); ctx1.arc(80,80,75,0,Math.PI*2); ctx1.clip();
+        ctx1.fillStyle = 'rgba(0,0,0,0.2)';
+        for(let j=0; j<8; j++) { ctx1.beginPath(); ctx1.arc(random(20, 140), random(20, 140), random(3, 15), 0, Math.PI*2); ctx1.fill(); }
         ctx1.restore();
         this.planetSprites.push(cv1);
 
-        // Planet with Rings
-        const cv2 = document.createElement('canvas'); cv2.width = 360; cv2.height = 360;
-        const ctx2 = cv2.getContext('2d');
-        ctx2.translate(180,180); ctx2.rotate(Math.PI/6);
-        
-        // Planet body
-        const g2 = ctx2.createRadialGradient(-30,-30,0, 0,0,90);
-        g2.addColorStop(0, clr.c); g2.addColorStop(0.7, clr.a); g2.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx2.fillStyle = g2; ctx2.beginPath(); ctx2.arc(0,0,80,0,Math.PI*2); ctx2.fill();
-        
-        // Dark ring shadow on planet
-        ctx2.beginPath(); ctx2.ellipse(0, 0, 120, 20, 0, 0, Math.PI*2); ctx2.fillStyle='rgba(0,0,0,0.4)'; ctx2.fill();
-        
-        // Bright rings
-        ctx2.beginPath(); ctx2.ellipse(0, 0, 140, 25, 0, 0, Math.PI*2);
-        ctx2.strokeStyle = 'rgba(255,255,255,0.2)'; ctx2.lineWidth = 12; ctx2.stroke();
-        ctx2.beginPath(); ctx2.ellipse(0, 0, 120, 15, 0, 0, Math.PI*2);
-        ctx2.strokeStyle = `hsla(${random(0,360)}, 100%, 70%, 0.4)`; ctx2.lineWidth = 4; ctx2.stroke();
-        
-        ctx2.resetTransform();
-        this.planetSprites.push(cv2);
+        // Rare Planet with Rings (Only index check in draw or here)
+        if (Math.random() < 0.15) { // Only 15% chance of ring variant for each color
+          const cv2 = document.createElement('canvas'); cv2.width = 240; cv2.height = 240;
+          const ctx2 = cv2.getContext('2d');
+          ctx2.translate(120,120); ctx2.rotate(Math.PI/4);
+          const g2 = ctx2.createRadialGradient(-20,-20,0, 0,0,60);
+          g2.addColorStop(0, clr.c); g2.addColorStop(0.8, clr.a); g2.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx2.fillStyle = g2; ctx2.beginPath(); ctx2.arc(0,0,55,0,Math.PI*2); ctx2.fill();
+          ctx2.beginPath(); ctx2.ellipse(0, 0, 100, 18, 0, 0, Math.PI*2);
+          ctx2.strokeStyle = 'rgba(255,255,255,0.15)'; ctx2.lineWidth = 6; ctx2.stroke();
+          this.planetSprites.push(cv2);
+        }
       }
 
-      // 4. Populate HUGE Infinite Universe Grid NO WRAPPING, absolute covering!
-      // This solves the 'corner only' issue forever.
-      const MIN_X = -WORLD.WIDTH * 0.5;
-      const MAX_X = WORLD.WIDTH * 1.5;
-      const MIN_Y = -WORLD.HEIGHT * 0.5;
-      const MAX_Y = WORLD.HEIGHT * 1.5;
+      // 4. Universe Population (Absolute coverage)
+      const MIN_X = -WORLD.WIDTH * 0.2; const MAX_X = WORLD.WIDTH * 1.2;
+      const MIN_Y = -WORLD.HEIGHT * 0.2; const MAX_Y = WORLD.HEIGHT * 1.2;
       
-      this.starsL1 = []; this.starsL2 = []; this.starsL3 = [];
+      this.starsL1 = []; this.starsL2 = []; this.starsL3 = []; this.starsL4 = [];
       this.nebulae = []; this.planets = []; this.galaxies = [];
 
-      for(let i=0; i<12000; i++) this.starsL1.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.5, 1.2), a: random(0.3, 0.9), p: 0.1});
-      for(let i=0; i<4000; i++) this.starsL2.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(1.5, 2.8), a: random(0.5, 1), p: 0.3});
-      for(let i=0; i<300; i++) this.starsL3.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(2, 5), hue: [280, 200, 320, 180, 60][Math.floor(random(0,5))], p: 0.4});
+      for(let i=0; i<15000; i++) this.starsL1.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.5, 1.0), a: random(0.3, 0.7), p: 0.05});
+      for(let i=0; i<5000; i++) this.starsL2.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(1.2, 2.0), a: random(0.4, 0.8), p: 0.15});
+      for(let i=0; i<400; i++) this.starsL3.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(2, 4), hue: [200, 280, 180, 50][Math.floor(random(0,4))], p: 0.35});
+      // New L4Layer: Dust/Motion particles (sell speed)
+      for(let i=0; i<200; i++) this.starsL4.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(1, 3), a: random(0.6, 1.0), p: 0.85});
       
-      // Nebulae clouds (very dense and spread everywhere absolutely)
-      for(let i=0; i<80; i++) {
+      // Distributed Nebulae
+      for(let i=0; i<100; i++) {
         this.nebulae.push({
-          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), 
-          scale: random(1.0, 3.0), angle: random(0, Math.PI*2), alpha: random(0.08, 0.22),
+          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.6, 2.0), 
+          angle: random(0, Math.PI*2), alpha: random(0.04, 0.12),
           spriteIdx: Math.floor(random(0, this.nebulaSprites.length)),
-          p: 0.05
+          p: 0.02
         });
       }
       
-      // Asset-based Nebulae (Original assets nebula_1.png and nebula_2.png)
+      // Asset Nebulae (Subtle original clouds)
       const assetNebs = [imgNebula1, imgNebula2];
-      for(let i=0; i<25; i++) {
+      for(let i=0; i<30; i++) {
          this.nebulae.push({
-           x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y),
-           scale: random(1.2, 3.5), angle: random(0, Math.PI*2), alpha: random(0.12, 0.3),
-           isAsset: true,
-           assetIdx: Math.floor(random(0, assetNebs.length)),
-           p: 0.04
+           x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.8, 2.2), 
+           angle: random(0, Math.PI*2), alpha: random(0.1, 0.22),
+           isAsset: true, assetIdx: Math.floor(random(0, assetNebs.length)),
+           p: 0.015
          });
       }
       
-      // Galaxies! Layered extremely deep - SCALED DOWN for distant feel
-      for(let i=0; i<50; i++) {
+      // Tiny Galaxies
+      for(let i=0; i<60; i++) {
          this.galaxies.push({
             x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y),
             spriteIdx: Math.floor(random(0, this.galaxySprites.length)),
-            scale: random(0.2, 0.7), angle: random(0, Math.PI*2), alpha: random(0.3, 0.7),
-            p: 0.02
+            scale: random(0.1, 0.45), angle: random(0, Math.PI*2), alpha: random(0.2, 0.6),
+            p: 0.01
          });
       }
 
-      // Far Planets (substantially more planets, absolutely spread everywhere) - SCALED DOWN
-      for(let i=0; i<300; i++) {
+      // Small realistic planets
+      for(let i=0; i<250; i++) {
         this.planets.push({
           x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y),
-          scale: random(0.12, 0.45), sprite: Math.floor(random(0, this.planetSprites.length)),
-          p: random(0.10, 0.35) 
+          scale: random(0.06, 0.28), sprite: Math.floor(random(0, this.planetSprites.length)),
+          p: random(0.12, 0.45) 
         });
       }
     },
 
     draw() {
-      // Deep Natural Space Background Color
-      ctx.fillStyle = '#0a030c'; 
+      // Pure Dark Vacuum
+      ctx.fillStyle = '#010002'; 
       ctx.fillRect(camera.x, camera.y, camera.width, camera.height);
 
-      // Rendering optimization bounds (Culling)
       const cL = camera.x, cR = camera.x + camera.width;
       const cT = camera.y, cB = camera.y + camera.height;
 
-      // 0. Galaxies (Lowest Parallax 0.02)
+      // 0. Galaxies
       ctx.globalCompositeOperation = 'screen';
       for(let g of this.galaxies) {
          let w = 800 * g.scale, h = 800 * g.scale;
          let drawX = g.x + camera.x * (1 - g.p);
          let drawY = g.y + camera.y * (1 - g.p);
          if (drawX > cL - w && drawX < cR + w && drawY > cT - h && drawY < cB + h) {
-            ctx.save(); ctx.globalAlpha = g.alpha; ctx.translate(drawX, drawY); ctx.rotate(g.angle);
+            ctx.save(); ctx.globalAlpha = g.alpha; ctx.translate(drawX, drawY); 
+            ctx.rotate(g.angle + frame * 0.0001);
             ctx.drawImage(this.galaxySprites[g.spriteIdx], -w/2, -h/2, w, h); ctx.restore();
          }
       }
 
-      // 1. Procedural + Asset Nebulae (parallax 0.04 - 0.05)
+      // 1. Nebulae
       const assetNebs = [imgNebula1, imgNebula2];
       for(let n of this.nebulae) {
          let spr = n.isAsset ? assetNebs[n.assetIdx] : this.nebulaSprites[n.spriteIdx];
          if (n.isAsset && (!spr.complete || spr.naturalWidth === 0)) continue;
-         
          let baseSize = n.isAsset ? 1000 : 600;
          let w = baseSize * n.scale, h = baseSize * n.scale;
          let drawX = n.x + camera.x * (1 - n.p);
@@ -694,52 +666,48 @@
       }
       ctx.globalCompositeOperation = 'source-over';
 
-      // 2. Stars L1 (parallax 0.1)
+      // 2. Distant Tiny Stars (L1, L2)
       ctx.fillStyle = '#ffffff';
       for(let s of this.starsL1) {
-         let drawX = s.x + camera.x * (1 - s.p);
-         let drawY = s.y + camera.y * (1 - s.p);
-         if (drawX > cL && drawX < cR && drawY > cT && drawY < cB) {
-            ctx.globalAlpha = s.a; ctx.fillRect(drawX, drawY, s.s, s.s);
-         }
+         let dx = s.x + camera.x * (1 - s.p); let dy = s.y + camera.y * (1 - s.p);
+         if (dx > cL && dx < cR && dy > cT && dy < cB) { ctx.globalAlpha = s.a; ctx.fillRect(dx, dy, s.s, s.s); }
+      }
+      for(let s of this.starsL2) {
+         let dx = s.x + camera.x * (1 - s.p); let dy = s.y + camera.y * (1 - s.p);
+         if (dx > cL && dx < cR && dy > cT && dy < cB) { ctx.globalAlpha = s.a; ctx.fillRect(dx, dy, s.s, s.s); }
       }
 
-      // 3. Planets (parallax 0.10 - 0.35)
+      // 3. Mini Planets
       for(let p of this.planets) {
          let spr = this.planetSprites[p.sprite];
          let w = spr.width * p.scale, h = spr.height * p.scale;
-         let drawX = p.x + camera.x * (1 - p.p);
-         let drawY = p.y + camera.y * (1 - p.p);
-         if (drawX > cL - w && drawX < cR + w && drawY > cT - h && drawY < cB + h) {
-            ctx.globalAlpha = 1.0;
-            ctx.drawImage(spr, drawX - w/2, drawY - h/2, w, h);
+         let dx = p.x + camera.x * (1 - p.p); let dy = p.y + camera.y * (1 - p.p);
+         if (dx > cL - w && dx < cR + w && dy > cT - h && dy < cB + h) {
+            ctx.globalAlpha = 1.0; ctx.drawImage(spr, dx - w/2, dy - h/2, w, h);
          }
       }
 
-      // 4. Stars L2 (parallax 0.3)
-      for(let s of this.starsL2) {
-         let drawX = s.x + camera.x * (1 - s.p);
-         let drawY = s.y + camera.y * (1 - s.p);
-         if (drawX > cL && drawX < cR && drawY > cT && drawY < cB) {
-            ctx.globalAlpha = s.a; ctx.fillRect(drawX, drawY, s.s, s.s);
-         }
-      }
-
-      // 5. Giant Stars L3 (parallax 0.4)
+      // 4. Mid Stars (L3)
       for(let s of this.starsL3) {
-         let drawX = s.x + camera.x * (1 - s.p);
-         let drawY = s.y + camera.y * (1 - s.p);
-         let bound = s.s * 6;
-         if (drawX > cL - bound && drawX < cR + bound && drawY > cT - bound && drawY < cB + bound) {
-            let flicker = 0.6 + Math.sin(frame*0.05 + s.x)*0.4;
-            ctx.globalAlpha = 0.6 * flicker;
-            let g = ctx.createRadialGradient(drawX, drawY, 0, drawX, drawY, bound);
-            g.addColorStop(0, `hsla(${s.hue}, 80%, 80%, 1)`);
-            g.addColorStop(0.3, `hsla(${s.hue}, 60%, 50%, 0.3)`);
-            g.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = g; ctx.fillRect(drawX - bound, drawY - bound, bound*2, bound*2);
-            ctx.globalAlpha = 1.0;
-            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(drawX, drawY, s.s*0.5, 0, Math.PI*2); ctx.fill();
+         let dx = s.x + camera.x * (1 - s.p); let dy = s.y + camera.y * (1 - s.p);
+         let b = s.s * 5;
+         if (dx > cL - b && dx < cR + b && dy > cT - b && dy < cB + b) {
+            let flick = 0.7 + Math.sin(frame*0.08 + s.x)*0.3;
+            ctx.globalAlpha = 0.5 * flick;
+            let g = ctx.createRadialGradient(dx, dy, 0, dx, dy, b);
+            g.addColorStop(0, `hsla(${s.hue}, 80%, 80%, 1)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g; ctx.fillRect(dx-b, dy-b, b*2, b*2);
+            ctx.globalAlpha = 1.0; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(dx, dy, s.s*0.5, 0, Math.PI*2); ctx.fill();
+         }
+      }
+
+      // 5. Fast Dust Overlay (L4) - Sell the Speed
+      ctx.fillStyle = '#ffeedd';
+      for(let s of this.starsL4) {
+         let dx = s.x + camera.x * (1 - s.p); let dy = s.y + camera.y * (1 - s.p);
+         if (dx > cL && dx < cR && dy > cT && dy < cB) {
+            ctx.globalAlpha = s.a * 0.6;
+            ctx.fillRect(dx, dy, s.s, s.s);
          }
       }
       ctx.globalAlpha = 1.0;
