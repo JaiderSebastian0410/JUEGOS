@@ -641,13 +641,15 @@
         spriteIdx: Math.floor(random(0, this.nebulaSprites.length)), isAsset: false, p: 0.05
       });
       
-      // Planets (Small/Mini scale, boosted parallax for speed feel)
+      // Planets (Mix of fixed world objects and parallax layers)
       for(let i=0; i<250; i++) {
         let isRing = Math.random() < 0.2;
         let colorIdx = Math.floor(random(0, pc.length));
+        // Some planets (40%) will be fixed world objects (p=1)
+        let isFixed = Math.random() < 0.4;
         this.planets.push({
           x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.12, 0.4), 
-          sprite: (colorIdx * 2) + (isRing ? 1 : 0), p: random(0.20, 0.55) 
+          sprite: (colorIdx * 2) + (isRing ? 1 : 0), p: isFixed ? 1.0 : random(0.20, 0.55) 
         });
       }
     },
@@ -730,7 +732,16 @@
     // Comets overlay (moves independently of camera)
     const cometCount = isMobile ? 3 : 7;
     for(let i=0; i<cometCount; i++) {
-      animatedStars.push({x:Math.random()*WORLD.WIDTH,y:Math.random()*WORLD.HEIGHT,speed:Math.random()*4+3,angle:Math.random()*0.4+0.2,length:Math.random()*120+60,alpha:Math.random()*0.6+0.3,thickness:Math.random()*2+1.5,type:'comet'});
+      animatedStars.push({
+        x: Math.random() * WORLD.WIDTH, 
+        y: Math.random() * WORLD.HEIGHT, 
+        speed: Math.random() * 4 + 3, 
+        angle: Math.random() * Math.PI * 2, // ALL DIRECTIONS
+        length: Math.random() * 120 + 60, 
+        alpha: Math.random() * 0.6 + 0.3, 
+        thickness: Math.random() * 2 + 1.5, 
+        type: 'comet'
+      });
     }
   }
   initBackground();
@@ -744,8 +755,11 @@
       if (s.type === 'comet') {
         s.x += Math.cos(s.angle) * s.speed;
         s.y += Math.sin(s.angle) * s.speed;
-        if (s.x > WORLD.WIDTH + 200) { s.x = -200; s.y = Math.random() * WORLD.HEIGHT; }
-        if (s.y > WORLD.HEIGHT + 200) { s.y = -200; s.x = Math.random() * WORLD.WIDTH; }
+        // Loop anywhere
+        if (s.x > WORLD.WIDTH + 300) s.x = -300;
+        if (s.x < -300) s.x = WORLD.WIDTH + 300;
+        if (s.y > WORLD.HEIGHT + 300) s.y = -300;
+        if (s.y < -300) s.y = WORLD.HEIGHT + 300;
         const cx = s.x - camera.x * 0.3, cy = s.y - camera.y * 0.3;
         if (cx > -s.length-20 && cx < camera.width+s.length+20 && cy > -s.length-20 && cy < camera.height+s.length+20) {
           const wx = camera.x+cx, wy = camera.y+cy;
