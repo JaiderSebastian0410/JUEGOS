@@ -620,25 +620,27 @@
       this.starsL1 = []; this.starsL2 = []; this.starsL3 = [];
       this.nebulae = []; this.planets = []; this.galaxies = [];
 
-      // HIGH STAR DENSITY (Increased parallax for 'flicker' speed)
-      for(let i=0; i<15000; i++) this.starsL1.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.3, 0.8), a: random(0.2, 0.5), p: 0.12});
-      for(let i=0; i<6000; i++) this.starsL2.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.8, 1.8), a: random(0.4, 0.8), p: 0.28});
-      for(let i=0; i<600; i++) this.starsL3.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(1.5, 3), hue: [200, 210, 320, 180, 60][Math.floor(random(0,5))], p: 0.45});
+      // ULTRA HIGH STAR DENSITY
+      for(let i=0; i<40000; i++) this.starsL1.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.2, 1.0), a: random(0.1, 0.6), p: random(0.05, 0.15)});
+      for(let i=0; i<20000; i++) this.starsL2.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.8, 2.5), a: random(0.3, 0.9), p: random(0.15, 0.35)});
+      for(let i=0; i<3000; i++) this.starsL3.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(2, 5), hue: [200, 210, 340, 180, 60, 40, 280][Math.floor(random(0,7))], p: random(0.35, 0.6)});
       
-      // Small/Medium Galaxies (Increased Count)
-      for(let i=0; i<80; i++) this.galaxies.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.06, 0.22), angle: random(0, Math.PI*2), alpha: random(0.3, 0.7),
-        spriteIdx: Math.floor(random(0, this.galaxySprites.length)), p: 0.025
+      // Small/Medium Galaxies (Increased Count and Variety)
+      for(let i=0; i<150; i++) this.galaxies.push({
+        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.05, 0.3), angle: random(0, Math.PI*2), alpha: random(0.2, 0.8),
+        spriteIdx: Math.floor(random(0, this.galaxySprites.length)), p: random(0.02, 0.1)
       });
 
-      // Nebulae (Smaller Assets + More mini-artistic nebulae)
-      for(let i=0; i<40; i++) this.nebulae.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.15, 0.45), angle: random(0, Math.PI*2), alpha: random(0.12, 0.3),
-        assetIdx: Math.floor(random(0, nebulaImages.length)), isAsset: true, p: 0.06
+      // Nebulae (Increased diversity, scale, and varying opacity layers)
+      // HD Asset Nebulae
+      for(let i=0; i<80; i++) this.nebulae.push({
+        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.1, 0.6), angle: random(0, Math.PI*2), alpha: random(0.05, 0.35),
+        assetIdx: Math.floor(random(0, nebulaImages.length)), isAsset: true, p: random(0.03, 0.08)
       });
-      for(let i=0; i<140; i++) this.nebulae.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.1, 0.35), angle: random(0, Math.PI*2), alpha: random(0.15, 0.45),
-        spriteIdx: Math.floor(random(0, this.nebulaSprites.length)), isAsset: false, p: 0.05
+      // Procedural Artistic Nebulae
+      for(let i=0; i<300; i++) this.nebulae.push({
+        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.08, 0.5), angle: random(0, Math.PI*2), alpha: random(0.1, 0.6),
+        spriteIdx: Math.floor(random(0, this.nebulaSprites.length)), isAsset: false, p: random(0.02, 0.12)
       });
       
       // Planets (Mix of fixed world objects and parallax layers)
