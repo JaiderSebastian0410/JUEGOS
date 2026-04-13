@@ -625,33 +625,40 @@
       for(let i=0; i<20000; i++) this.starsL2.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(0.8, 2.5), a: random(0.3, 0.9), p: random(0.15, 0.35)});
       for(let i=0; i<3000; i++) this.starsL3.push({x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), s: random(2, 5), hue: [200, 210, 340, 180, 60, 40, 280][Math.floor(random(0,7))], p: random(0.35, 0.6)});
       
-      // Small/Medium Galaxies (Increased Count and Variety)
-      for(let i=0; i<150; i++) this.galaxies.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.05, 0.3), angle: random(0, Math.PI*2), alpha: random(0.2, 0.8),
-        spriteIdx: Math.floor(random(0, this.galaxySprites.length)), p: random(0.02, 0.1)
-      });
+      // Small/Medium Galaxies (Mix of fixed and parallax layers)
+      for(let i=0; i<150; i++) {
+        let isFixed = Math.random() < 0.3;
+        this.galaxies.push({
+          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.05, 0.3), angle: random(0, Math.PI*2), alpha: random(0.2, 0.7),
+          spriteIdx: Math.floor(random(0, this.galaxySprites.length)), 
+          p: isFixed ? 1.0 : random(0.02, 0.15)
+        });
+      }
 
       // Nebulae (Increased diversity, scale, and varying opacity layers)
-      // HD Asset Nebulae
-      for(let i=0; i<80; i++) this.nebulae.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.1, 0.6), angle: random(0, Math.PI*2), alpha: random(0.05, 0.35),
-        assetIdx: Math.floor(random(0, nebulaImages.length)), isAsset: true, p: random(0.03, 0.08)
-      });
-      // Procedural Artistic Nebulae
-      for(let i=0; i<300; i++) this.nebulae.push({
-        x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.08, 0.5), angle: random(0, Math.PI*2), alpha: random(0.1, 0.6),
-        spriteIdx: Math.floor(random(0, this.nebulaSprites.length)), isAsset: false, p: random(0.02, 0.12)
-      });
-      
-      // Planets (Mix of fixed world objects and parallax layers)
+      // Procedural Artistic Nebulae (Always varied p)
       for(let i=0; i<250; i++) {
+        this.nebulae.push({
+          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.4, 0.9), angle: random(0, Math.PI*2), alpha: random(0.1, 0.4),
+          spriteIdx: Math.floor(random(0, this.nebulaSprites.length)), isAsset: false, p: random(0.02, 0.12)
+        });
+      }
+      // HD Asset Nebulae
+      for(let i=0; i<60; i++) {
+        this.nebulae.push({
+          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.3, 0.8), angle: random(0, Math.PI*2), alpha: random(0.05, 0.3),
+          assetIdx: Math.floor(random(0, nebulaImages.length)), isAsset: true, p: random(0.01, 0.05)
+        });
+      }
+      
+      // Planets (Kept in deep background to avoid confusion with enemies)
+      for(let i=120; i<370; i++) {
         let isRing = Math.random() < 0.2;
         let colorIdx = Math.floor(random(0, pc.length));
-        // Some planets (40%) will be fixed world objects (p=1)
-        let isFixed = Math.random() < 0.4;
         this.planets.push({
-          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.12, 0.4), 
-          sprite: (colorIdx * 2) + (isRing ? 1 : 0), p: isFixed ? 1.0 : random(0.20, 0.55) 
+          x: random(MIN_X, MAX_X), y: random(MIN_Y, MAX_Y), scale: random(0.12, 0.35), 
+          sprite: (colorIdx * 2) + (isRing ? 1 : 0), 
+          p: random(0.1, 0.35) // Deep background only
         });
       }
     },
