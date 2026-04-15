@@ -3,7 +3,7 @@
    Offline-first: caches ALL assets including skins & fonts
    ========================================================= */
 
-const CACHE_VERSION = 'space-defender-v19';
+const CACHE_VERSION = 'space-defender-v20';
 const STATIC_ASSETS = [
   './',
   './juego.html',

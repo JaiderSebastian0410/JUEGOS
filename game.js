@@ -507,7 +507,7 @@
       // 1. Array of real HD Nebula Images (Assets)
       const nebulaImages = [imgNebula1, imgNebula2];
       
-      // 2. High-Detail Procedural Nebulae (Filaments and gas knots)
+      // 2. High-Detail Procedural Nebulae (Mariposas/Estructuras realistas sin líneas)
       this.nebulaSprites = [];
       const nebPalettes = [
         {outer:[192,56,43], mid:[231,76,60], inner:[26,188,156], accent:[41,128,185]}, // Cassiopeia (Red, Cyan)
@@ -520,54 +520,51 @@
         {outer:[183,21,64], mid:[235,47,6], inner:[229,80,57], accent:[248,194,145]}     // Rosette (Crimson)
       ];
       for (const pal of nebPalettes) {
-        const sz = 600;
+        const sz = 800;
         const c = document.createElement('canvas'); c.width=sz; c.height=sz;
         const x = c.getContext('2d');
         const cx = sz/2, cy = sz/2;
         const [or,og,ob] = pal.outer, [mr,mg,mb] = pal.mid;
         const [ir,ig,ib] = pal.inner, [ar,ag,ab] = pal.accent;
         
-        // Halo
-        const g1 = x.createRadialGradient(cx, cy, sz*0.02, cx, cy, sz*0.48);
-        g1.addColorStop(0, `rgba(${ir},${ig},${ib},0.85)`);
-        g1.addColorStop(0.3, `rgba(${or},${og},${ob},0.4)`);
-        g1.addColorStop(0.6, `rgba(${mr},${mg},${mb},0.15)`);
-        g1.addColorStop(1, 'rgba(0,0,0,0)');
-        x.fillStyle = g1;
-        x.beginPath(); x.ellipse(cx, cy, sz*0.46, sz*0.36, random(-0.4,0.4), 0, Math.PI*2); x.fill();
+        // Forma de mariposa / arcos de gas
+        x.globalCompositeOperation = 'screen';
         
-        // Inner Core
-        const g2 = x.createRadialGradient(cx+random(-20,20), cy+random(-20,20), 0, cx, cy, sz*0.25);
-        g2.addColorStop(0, `rgba(${ir},${ig},${ib},0.95)`);
-        g2.addColorStop(0.6, `rgba(${mr},${mg},${mb},0.5)`);
-        g2.addColorStop(1, 'rgba(0,0,0,0)');
-        x.fillStyle = g2;
-        x.beginPath(); x.ellipse(cx, cy, sz*0.24, sz*0.18, random(-0.8,0.8), 0, Math.PI*2); x.fill();
-        
-        // Filament wisps
-        for(let f=0; f<14; f++) {
-          const angle = (f/14)*Math.PI*2 + random(-0.3,0.3);
-          const r1 = sz*random(0.06,0.12), r2 = sz*random(0.22,0.44);
-          const col = (f%2===0) ? pal.outer : pal.accent;
-          x.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},0.45)`;
-          x.lineWidth = random(4, 10); x.lineCap = 'round';
-          const cx1 = cx+Math.cos(angle+0.5)*r1*1.8, cy1 = cy+Math.sin(angle+0.5)*r1*1.8;
-          x.beginPath(); x.moveTo(cx+Math.cos(angle)*r1, cy+Math.sin(angle)*r1);
-          x.quadraticCurveTo(cx1, cy1, cx+Math.cos(angle)*r2, cy+Math.sin(angle)*r2); x.stroke();
+        for(let wisp=0; wisp<9; wisp++) {
+           x.save(); x.translate(cx, cy); x.rotate(random(0, Math.PI*2));
+           x.scale(1, random(0.15, 0.45)); // Alargas para crear la línea/arco
+           
+           const col = (wisp%3===0) ? pal.outer : ((wisp%3===1) ? pal.mid : pal.accent);
+           const rx = sz * random(0.3, 0.48);
+           const grad = x.createRadialGradient(0,0,0,0,0,rx);
+           grad.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},0.45)`);
+           grad.addColorStop(0.4, `rgba(${col[0]},${col[1]},${col[2]},0.15)`);
+           grad.addColorStop(1, 'rgba(0,0,0,0)');
+           
+           const offset = rx * random(0.1, 0.6);
+           x.fillStyle = grad;
+           x.beginPath(); x.arc(offset, 0, rx, 0, Math.PI*2); x.fill();
+           x.beginPath(); x.arc(-offset, 0, rx, 0, Math.PI*2); x.fill(); // Simetría opuesta
+           
+           // Nube extra asimétrica
+           if(Math.random() < 0.5) {
+               x.beginPath(); x.arc(0, rx*0.5, rx*0.8, 0, Math.PI*2); x.fill();
+           }
+           x.restore();
         }
         
-        // Gas knots
-        for(let b=0; b<10; b++) {
-          const bx=cx+random(-sz*0.3,sz*0.3), by=cy+random(-sz*0.25,sz*0.25);
-          const br=random(10,35);
-          const bg=x.createRadialGradient(bx,by,0,bx,by,br);
-          bg.addColorStop(0, `rgba(${ar},${ag},${ab},0.5)`); bg.addColorStop(1,'rgba(0,0,0,0)');
-          x.fillStyle=bg; x.beginPath(); x.arc(bx,by,br,0,Math.PI*2); x.fill();
-        }
+        // Brillo central y knots 
+        const cg = x.createRadialGradient(cx, cy, 0, cx, cy, sz*0.25);
+        cg.addColorStop(0, `rgba(${ir},${ig},${ib}, 0.85)`);
+        cg.addColorStop(0.3, `rgba(${mr},${mg},${mb}, 0.4)`);
+        cg.addColorStop(1, 'rgba(0,0,0,0)');
+        x.fillStyle = cg; x.beginPath(); x.arc(cx, cy, sz*0.25, 0, Math.PI*2); x.fill();
+        
         // Embedded stars
-        for(let s=0; s<25; s++) {
+        x.globalCompositeOperation = 'source-over';
+        for(let s=0; s<35; s++) {
           x.fillStyle=`rgba(255,255,255,${random(0.5,1.0)})`;
-          x.beginPath(); x.arc(cx+random(-sz*0.35,sz*0.35),cy+random(-sz*0.35,sz*0.35),random(1,2),0,Math.PI*2); x.fill();
+          x.beginPath(); x.arc(cx+random(-sz*0.35,sz*0.35),cy+random(-sz*0.35,sz*0.35),random(1,2.5),0,Math.PI*2); x.fill();
         }
         this.nebulaSprites.push(c);
       }
@@ -760,14 +757,14 @@
         });
       }
       
-      // HD Asset Nebulae (Images) — MUY pequeñas, súper lejanas y fijas al universo
+      // HD Asset Nebulae (Images) — Lejanas y fijas al universo, visibles
       // El parallax entre 0.96 y 0.99 asegura que se muevan poquísimo con respecto al fondo de pantalla
       for(let i=0; i<8; i++) {
         this.nebulae.push({
            x: random(-1000, W+1000), y: random(-1000, H+1000),
-           scale: random(0.06, 0.18), // Muchísimo más pequeñas
+           scale: random(0.4, 0.95), // Escala suficiente para que se vean, pero no tapen todo
            angle: random(0, Math.PI*2),
-           alpha: random(0.15, 0.35), // Transparencia alta para integrarse
+           alpha: random(0.2, 0.40), 
            assetIdx: Math.floor(random(0, 2)),
            isAsset: true, p: random(0.96, 0.99) 
         });
@@ -865,14 +862,16 @@
       ctx.globalCompositeOperation = 'lighter'; 
       for(let s of this.starsL3) {
          let dx = s.x + camera.x * (1 - s.p); let dy = s.y + camera.y * (1 - s.p);
-         let b = s.s * 8;
+         let b = s.s * 3.5; // Radio de luz disminuido enormemente para estrellas más "sólidas"
          if (dx > cL - b && dx < cR + b && dy > cT - b && dy < cB + b) {
-            let flick = 0.6 + Math.sin(frame*0.06 + s.x)*0.4;
-            ctx.globalAlpha = 0.5 * flick;
+            let flick = 0.7 + Math.sin(frame*0.06 + s.x)*0.3;
+            ctx.globalAlpha = 0.6 * flick;
             let g = ctx.createRadialGradient(dx, dy, 0, dx, dy, b);
-            g.addColorStop(0, `hsla(${s.hue}, 80%, 80%, 1)`); g.addColorStop(1, `hsla(${s.hue}, 80%, 80%, 0)`);
+            g.addColorStop(0, `hsla(${s.hue}, 80%, 90%, 0.85)`); 
+            g.addColorStop(0.3, `hsla(${s.hue}, 80%, 75%, 0.3)`);
+            g.addColorStop(1, `hsla(${s.hue}, 80%, 75%, 0)`);
             ctx.fillStyle = g; ctx.fillRect(dx-b, dy-b, b*2, b*2);
-            ctx.globalAlpha = 1.0; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(dx, dy, s.s*0.5, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1.0; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(dx, dy, s.s*0.6, 0, Math.PI*2); ctx.fill();
          }
       }
       ctx.globalCompositeOperation = 'source-over';
