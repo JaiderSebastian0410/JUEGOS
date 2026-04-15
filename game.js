@@ -544,58 +544,58 @@
         this.nebulaSprites.push(c);
       }
 
-      // 3. Realistic Galaxy Sprites (tight logarithmic spirals)
+      // 3. Realistic Galaxy Sprites (visible star particles + bright glow)
       this.galaxySprites = [];
       const galConfigs = [
-        {hCore:45,hArm:210,arms:2,tight:0.22,tilt:0.8},  // Gold core, blue arms
-        {hCore:30,hArm:200,arms:3,tight:0.25,tilt:0.6},  // Orange core, cyan arms
-        {hCore:50,hArm:280,arms:2,tight:0.20,tilt:0.4},  // Yellow core, purple arms
-        {hCore:40,hArm:180,arms:4,tight:0.28,tilt:0.9},  // Warm core, teal arms
-        {hCore:35,hArm:340,arms:2,tight:0.18,tilt:0.3},  // Gold core, pink arms (edge-on)
-        {hCore:45,hArm:120,arms:3,tight:0.24,tilt:0.7},  // Yellow core, green arms
-        {hCore:30,hArm:240,arms:2,tight:0.20,tilt:0.5},  // Orange core, indigo arms
-        {hCore:50,hArm:20, arms:2,tight:0.22,tilt:0.85}  // Warm core, red arms
+        {hCore:45,hArm:210,arms:2,tight:0.22,tilt:0.8},
+        {hCore:30,hArm:200,arms:3,tight:0.25,tilt:0.65},
+        {hCore:50,hArm:280,arms:2,tight:0.20,tilt:0.45},
+        {hCore:40,hArm:180,arms:4,tight:0.28,tilt:0.9},
+        {hCore:35,hArm:340,arms:2,tight:0.18,tilt:0.35},
+        {hCore:45,hArm:120,arms:3,tight:0.24,tilt:0.7},
+        {hCore:30,hArm:240,arms:2,tight:0.20,tilt:0.55},
+        {hCore:50,hArm:20, arms:2,tight:0.22,tilt:0.85}
       ];
       for(const gc of galConfigs) {
-        const sz=400, c=document.createElement('canvas'); c.width=sz; c.height=sz;
+        const sz=300, c=document.createElement('canvas'); c.width=sz; c.height=sz;
         const x=c.getContext('2d');
         x.translate(sz/2, sz/2); x.rotate(random(0,Math.PI*2));
         
-        // Diffuse outer halo
-        const hg=x.createRadialGradient(0,0,0,0,0,sz*0.45);
-        hg.addColorStop(0,`hsla(${gc.hCore},60%,60%,0.15)`); hg.addColorStop(1,'rgba(0,0,0,0)');
-        x.fillStyle=hg; x.beginPath(); x.ellipse(0,0,sz*0.45,sz*0.45*gc.tilt,0,0,Math.PI*2); x.fill();
+        // Diffuse halo (visible warm glow)
+        const hg=x.createRadialGradient(0,0,0,0,0,sz*0.48);
+        hg.addColorStop(0,`hsla(${gc.hCore},70%,65%,0.3)`);
+        hg.addColorStop(0.4,`hsla(${gc.hArm},50%,40%,0.1)`);
+        hg.addColorStop(1,'rgba(0,0,0,0)');
+        x.fillStyle=hg; x.beginPath(); x.ellipse(0,0,sz*0.47,sz*0.47*gc.tilt,0,0,Math.PI*2); x.fill();
         
-        // Spiral arms (dense star particles)
+        // Spiral arms with VISIBLE star particles (2-5px)
         for(let arm=0; arm<gc.arms; arm++) {
           const off=(Math.PI*2/gc.arms)*arm;
-          for(let i=0; i<1200; i++) {
-            const a=i*0.004, r=8*Math.exp(gc.tight*a);
-            if(r>sz*0.42) break;
-            const spread=(r/sz)*25;
+          for(let i=0; i<800; i++) {
+            const a=i*0.005, r=6*Math.exp(gc.tight*a);
+            if(r>sz*0.44) break;
+            const spread=(r/sz)*20;
             const px=Math.cos(a+off)*r + random(-spread,spread);
             const py=(Math.sin(a+off)*r + random(-spread,spread))*gc.tilt;
-            const dist=r/(sz*0.42);
-            // Color: blue/outer hue far from center, warm near center
-            const starH = dist>0.5 ? gc.hArm+random(-15,15) : gc.hCore+random(-15,15);
-            const starL = 50+random(0,30);
-            const starA = (1-dist)*random(0.3,0.8);
-            const starSz = random(0.3,1.5)*(1-dist*0.7);
+            const dist=r/(sz*0.44);
+            const starH = dist>0.4 ? gc.hArm+random(-20,20) : gc.hCore+random(-10,10);
+            const starL = 55+random(0,30);
+            const starA = (1-dist*0.6)*random(0.4,0.9);
+            const starSz = random(1, 3.5)*(1-dist*0.5);
             x.fillStyle=`hsla(${starH},90%,${starL}%,${starA})`;
             x.beginPath(); x.arc(px,py,starSz,0,Math.PI*2); x.fill();
           }
         }
         
-        // Bright core
-        const cg=x.createRadialGradient(0,0,0,0,0,20);
-        cg.addColorStop(0,'rgba(255,255,230,1)'); cg.addColorStop(0.3,`hsla(${gc.hCore},100%,80%,0.8)`);
-        cg.addColorStop(1,'rgba(0,0,0,0)');
-        x.fillStyle=cg; x.beginPath(); x.ellipse(0,0,20,20*gc.tilt,0,0,Math.PI*2); x.fill();
+        // Bright core (large, visible)
+        const cg2=x.createRadialGradient(0,0,0,0,0,40);
+        cg2.addColorStop(0,`hsla(${gc.hCore},80%,75%,0.6)`); cg2.addColorStop(1,'rgba(0,0,0,0)');
+        x.fillStyle=cg2; x.beginPath(); x.ellipse(0,0,40,40*gc.tilt,0,0,Math.PI*2); x.fill();
         
-        // Core glow
-        const gg=x.createRadialGradient(0,0,0,0,0,50);
-        gg.addColorStop(0,`hsla(${gc.hCore},80%,70%,0.5)`); gg.addColorStop(1,'rgba(0,0,0,0)');
-        x.fillStyle=gg; x.beginPath(); x.ellipse(0,0,50,50*gc.tilt,0,0,Math.PI*2); x.fill();
+        const cg=x.createRadialGradient(0,0,0,0,0,15);
+        cg.addColorStop(0,'rgba(255,255,240,1)'); cg.addColorStop(0.5,`hsla(${gc.hCore},100%,85%,0.9)`);
+        cg.addColorStop(1,'rgba(0,0,0,0)');
+        x.fillStyle=cg; x.beginPath(); x.ellipse(0,0,15,15*gc.tilt,0,0,Math.PI*2); x.fill();
         
         this.galaxySprites.push(c);
       }
@@ -656,36 +656,36 @@
       for(let i=15000; i<30000; i++) this.starsL2.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(0.8, 1.5), a: random(0.3, 0.7), p: random(0.15, 0.25)});
       for(let i=0; i<2000; i++) this.starsL3.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(1.5, 4), hue: [200, 210, 340, 180, 60, 40, 280][Math.floor(random(0,7))], p: random(0.3, 0.5)});
       
-      // Galaxies FIXED in world (p near 1.0 = don't follow ship), moderate sizes
-      for(let i=0; i<25; i++) {
+      // Galaxies FIXED in world, moderate sizes, VISIBLE
+      for(let i=0; i<20; i++) {
         this.galaxies.push({
           x: random(0, W), y: random(0, H),
-          scale: random(0.08, 0.30),
+          scale: random(0.25, 0.55),
           angle: random(0, Math.PI*2),
-          alpha: random(0.5, 0.85),
+          alpha: random(0.6, 0.95),
           spriteIdx: Math.floor(random(0, this.galaxySprites.length)), 
-          p: random(0.92, 0.98)  // Near 1.0 = stays in place, doesn't follow ship
+          p: random(0.93, 0.98)
         });
       }
 
-      // Procedural Nebulae (more of them, within world)
-      for(let i=0; i<50; i++) {
+      // Procedural Nebulae — DEEP background (p=0.05-0.20), fewer, subtle
+      for(let i=0; i<25; i++) {
         this.nebulae.push({
-          x: random(-200, W+200), y: random(-200, H+200),
-          scale: random(0.35, 1.0), angle: random(0, Math.PI*2),
-          alpha: random(0.2, 0.45),
+          x: random(-500, W+500), y: random(-500, H+500),
+          scale: random(0.3, 0.8), angle: random(0, Math.PI*2),
+          alpha: random(0.10, 0.28),
           spriteIdx: Math.floor(random(0, this.nebulaSprites.length)),
-          isAsset: false, p: random(0.85, 0.95)
+          isAsset: false, p: random(0.05, 0.20)
         });
       }
-      // Real HD asset nebulae (nebula_1.png, nebula_2.png)
-      for(let i=0; i<15; i++) {
+      // Real HD asset nebulae — deep background too
+      for(let i=0; i<8; i++) {
         this.nebulae.push({
-          x: random(-200, W+200), y: random(-200, H+200),
-          scale: random(0.2, 0.5), angle: random(0, Math.PI*2),
-          alpha: random(0.18, 0.38),
+          x: random(-500, W+500), y: random(-500, H+500),
+          scale: random(0.15, 0.4), angle: random(0, Math.PI*2),
+          alpha: random(0.10, 0.25),
           assetIdx: Math.floor(random(0, 2)),
-          isAsset: true, p: random(0.88, 0.96)
+          isAsset: true, p: random(0.05, 0.15)
         });
       }
       
@@ -728,11 +728,11 @@
          }
       }
 
-      // 1. Galaxies (also background, lighter blend)
+      // 1. Galaxies (lighter blend, 300px sprites)
       for(let g of this.galaxies) {
          let spr = this.galaxySprites[g.spriteIdx];
          if(!spr) continue;
-         let w = 400 * g.scale, h = 400 * g.scale;
+         let w = 300 * g.scale, h = 300 * g.scale;
          let dx = g.x + camera.x * (1 - g.p); let dy = g.y + camera.y * (1 - g.p);
          if (dx > cL - w && dx < cR + w && dy > cT - h && dy < cB + h) {
             ctx.save(); ctx.globalAlpha = g.alpha; ctx.translate(dx, dy); ctx.rotate(g.angle);
