@@ -719,6 +719,9 @@
           scale: random(0.8, 1.6), angle: random(0, Math.PI*2),
           alpha: random(0.4, 0.8), 
           assetIdx: Math.floor(random(0, 2)),
+          isAsset: true, p: random(0.01, 0.05) // Pushed extremely far back
+        });
+      }
       // Galaxies FIXED in world, MUCH SMALLER
       for(let i=0; i<30; i++) {
         this.galaxies.push({
