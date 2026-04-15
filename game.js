@@ -731,11 +731,11 @@
       for(let i=15000; i<30000; i++) this.starsL2.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(0.8, 1.5), a: random(0.3, 0.7), p: random(0.15, 0.25)});
       for(let i=0; i<2000; i++) this.starsL3.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(1.5, 4), hue: [200, 210, 340, 180, 60, 40, 280][Math.floor(random(0,7))], p: random(0.3, 0.5)});
       
-      // Galaxies in 3 background layers (deep, mid-deep, mid) — moderate count
+      // Galaxies in 3 background layers — VISIBLE sizes and alpha
       const galLayers = [
-        { p: 0.03, count: 15, scaleMin: 0.04, scaleMax: 0.10, alphaMin: 0.15, alphaMax: 0.35 },
-        { p: 0.07, count: 12, scaleMin: 0.10, scaleMax: 0.25, alphaMin: 0.25, alphaMax: 0.50 },
-        { p: 0.12, count: 8,  scaleMin: 0.20, scaleMax: 0.45, alphaMin: 0.30, alphaMax: 0.60 }
+        { p: 0.03, count: 12, scaleMin: 0.10, scaleMax: 0.25, alphaMin: 0.35, alphaMax: 0.6 },
+        { p: 0.07, count: 10, scaleMin: 0.25, scaleMax: 0.55, alphaMin: 0.45, alphaMax: 0.75 },
+        { p: 0.12, count: 6,  scaleMin: 0.50, scaleMax: 1.0,  alphaMin: 0.50, alphaMax: 0.85 }
       ];
       for(const layer of galLayers) {
         for(let i=0; i<layer.count; i++) {
@@ -750,22 +750,22 @@
         }
       }
 
-      // Procedural Nebulae (moderate, varied sizes)
-      for(let i=0; i<60; i++) {
+      // Procedural Nebulae — VISIBLE sizes
+      for(let i=0; i<40; i++) {
         this.nebulae.push({
           x: random(-PAD*2, W+PAD*2), y: random(-PAD*2, H+PAD*2),
-          scale: random(0.2, 0.7), angle: random(0, Math.PI*2),
-          alpha: random(0.15, 0.4),
+          scale: random(0.5, 1.5), angle: random(0, Math.PI*2),
+          alpha: random(0.3, 0.65),
           spriteIdx: Math.floor(random(0, this.nebulaSprites.length)),
           isAsset: false, p: random(0.04, 0.10)
         });
       }
       // Real HD asset nebulae (nebula_1.png, nebula_2.png)
-      for(let i=0; i<20; i++) {
+      for(let i=0; i<15; i++) {
         this.nebulae.push({
           x: random(-PAD*2, W+PAD*2), y: random(-PAD*2, H+PAD*2),
-          scale: random(0.15, 0.5), angle: random(0, Math.PI*2),
-          alpha: random(0.18, 0.4),
+          scale: random(0.3, 0.8), angle: random(0, Math.PI*2),
+          alpha: random(0.25, 0.55),
           assetIdx: Math.floor(random(0, 2)),
           isAsset: true, p: random(0.03, 0.08)
         });
