@@ -507,54 +507,67 @@
       // 1. Array of real HD Nebula Images (Assets)
       const nebulaImages = [imgNebula1, imgNebula2];
       
-      // 2. Procedural Nebulae (Highly diffused, no clipping borders)
+      // 2. High-Detail Procedural Nebulae (Filaments and gas knots)
       this.nebulaSprites = [];
-      const nebColors = [
-        [[180,40,60],[220,80,80],[30,180,160]],   // Red-Cyan (Cassiopeia)
-        [[130,50,170],[180,100,200],[240,190,30]], // Purple-Gold (Star forming)
-        [[220,80,140],[255,130,170],[100,170,255]],// Pink-Blue (Orion)
-        [[40,160,100],[80,210,140],[20,130,110]],  // Green (Eagle)
-        [[200,100,50],[250,170,120],[20,200,190]], // Orange-Teal (Crab)
-        [[180,50,50],[240,100,100],[80,60,220]],   // Red-Indigo (Veil)
-        [[20,170,140],[70,230,190],[250,200,100]], // Teal-Amber (Ring)
-        [[170,30,60],[230,50,10],[230,80,60]],     // Crimson (Rosette)
-        [[60,100,200],[100,150,240],[200,180,255]],// Blue (Reflection)
-        [[200,150,50],[240,200,100],[180,100,200]] // Gold-Violet
+      const nebPalettes = [
+        {outer:[192,56,43], mid:[231,76,60], inner:[26,188,156], accent:[41,128,185]}, // Cassiopeia (Red, Cyan)
+        {outer:[142,68,173], mid:[155,89,182], inner:[241,196,15], accent:[230,126,34]}, // Star-forming (Purple, Gold)
+        {outer:[39,174,96], mid:[46,204,113], inner:[22,160,133], accent:[26,188,156]},  // Eagle (Green)
+        {outer:[232,67,147], mid:[253,121,168], inner:[116,185,255], accent:[9,132,227]},// Orion (Pink, Blue)
+        {outer:[225,112,85], mid:[250,177,160], inner:[0,206,201], accent:[9,132,227]},  // Crab (Orange, Teal)
+        {outer:[214,48,49], mid:[255,118,117], inner:[108,92,231], accent:[162,155,254]}, // Veil (Red, Indigo)
+        {outer:[0,184,148], mid:[85,239,196], inner:[253,203,110], accent:[243,156,18]}, // Ring (Teal, Amber)
+        {outer:[183,21,64], mid:[235,47,6], inner:[229,80,57], accent:[248,194,145]}     // Rosette (Crimson)
       ];
-      for(const cols of nebColors) {
-        const sz=1200, c=document.createElement('canvas'); c.width=sz; c.height=sz;
-        const x=c.getContext('2d'), cx=sz/2, cy=sz/2;
+      for (const pal of nebPalettes) {
+        const sz = 600;
+        const c = document.createElement('canvas'); c.width=sz; c.height=sz;
+        const x = c.getContext('2d');
+        const cx = sz/2, cy = sz/2;
+        const [or,og,ob] = pal.outer, [mr,mg,mb] = pal.mid;
+        const [ir,ig,ib] = pal.inner, [ar,ag,ab] = pal.accent;
         
-        const points = [];
-        for(let p=0; p<6; p++) points.push({ ox: cx + random(-100, 100), oy: cy + random(-100, 100) });
+        // Halo
+        const g1 = x.createRadialGradient(cx, cy, sz*0.02, cx, cy, sz*0.48);
+        g1.addColorStop(0, `rgba(${ir},${ig},${ib},0.85)`);
+        g1.addColorStop(0.3, `rgba(${or},${og},${ob},0.4)`);
+        g1.addColorStop(0.6, `rgba(${mr},${mg},${mb},0.15)`);
+        g1.addColorStop(1, 'rgba(0,0,0,0)');
+        x.fillStyle = g1;
+        x.beginPath(); x.ellipse(cx, cy, sz*0.46, sz*0.36, random(-0.4,0.4), 0, Math.PI*2); x.fill();
         
-        for(let layer=0; layer<18; layer++) {
-          const col = cols[layer % cols.length];
-          const pt = points[Math.floor(random(0, points.length))];
-          const ox = pt.ox + random(-60, 60), oy = pt.oy + random(-60, 60);
-          const rx = random(100, 250), ry = random(80, 200); 
-          const g = x.createRadialGradient(0,0,0,0,0,rx);
-          g.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${random(0.3,0.5)})`);
-          g.addColorStop(0.5, `rgba(${col[0]},${col[1]},${col[2]},${random(0.1,0.2)})`);
-          g.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
-          x.save(); x.translate(ox, oy); x.scale(1, ry/rx); x.rotate(random(0, Math.PI));
-          x.fillStyle = g; x.beginPath(); x.arc(0,0,rx,0,Math.PI*2); x.fill(); x.restore();
+        // Inner Core
+        const g2 = x.createRadialGradient(cx+random(-20,20), cy+random(-20,20), 0, cx, cy, sz*0.25);
+        g2.addColorStop(0, `rgba(${ir},${ig},${ib},0.95)`);
+        g2.addColorStop(0.6, `rgba(${mr},${mg},${mb},0.5)`);
+        g2.addColorStop(1, 'rgba(0,0,0,0)');
+        x.fillStyle = g2;
+        x.beginPath(); x.ellipse(cx, cy, sz*0.24, sz*0.18, random(-0.8,0.8), 0, Math.PI*2); x.fill();
+        
+        // Filament wisps
+        for(let f=0; f<14; f++) {
+          const angle = (f/14)*Math.PI*2 + random(-0.3,0.3);
+          const r1 = sz*random(0.06,0.12), r2 = sz*random(0.22,0.44);
+          const col = (f%2===0) ? pal.outer : pal.accent;
+          x.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},0.45)`;
+          x.lineWidth = random(4, 10); x.lineCap = 'round';
+          const cx1 = cx+Math.cos(angle+0.5)*r1*1.8, cy1 = cy+Math.sin(angle+0.5)*r1*1.8;
+          x.beginPath(); x.moveTo(cx+Math.cos(angle)*r1, cy+Math.sin(angle)*r1);
+          x.quadraticCurveTo(cx1, cy1, cx+Math.cos(angle)*r2, cy+Math.sin(angle)*r2); x.stroke();
         }
         
-        for(let layer=0; layer<10; layer++) {
-          const pt = points[Math.floor(random(0, points.length))];
-          const ox = pt.ox + random(-80, 80), oy = pt.oy + random(-80, 80);
-          const r = random(100, 220);
-          const g = x.createRadialGradient(ox,oy,0,ox,oy,r);
-          g.addColorStop(0, `rgba(0,0,0,${random(0.1, 0.3)})`); 
-          g.addColorStop(1, 'rgba(0,0,0,0)');
-          x.fillStyle = g; x.beginPath(); x.arc(ox,oy,r,0,Math.PI*2); x.fill();
+        // Gas knots
+        for(let b=0; b<10; b++) {
+          const bx=cx+random(-sz*0.3,sz*0.3), by=cy+random(-sz*0.25,sz*0.25);
+          const br=random(10,35);
+          const bg=x.createRadialGradient(bx,by,0,bx,by,br);
+          bg.addColorStop(0, `rgba(${ar},${ag},${ab},0.5)`); bg.addColorStop(1,'rgba(0,0,0,0)');
+          x.fillStyle=bg; x.beginPath(); x.arc(bx,by,br,0,Math.PI*2); x.fill();
         }
-
-        for(let s=0; s<40; s++) {
-          const sx = cx+random(-220,220), sy = cy+random(-220,220);
-          x.fillStyle=`rgba(255,255,255,${random(0.4,0.9)})`;
-          x.beginPath(); x.arc(sx,sy,random(0.5,2.0),0,Math.PI*2); x.fill();
+        // Embedded stars
+        for(let s=0; s<25; s++) {
+          x.fillStyle=`rgba(255,255,255,${random(0.5,1.0)})`;
+          x.beginPath(); x.arc(cx+random(-sz*0.35,sz*0.35),cy+random(-sz*0.35,sz*0.35),random(1,2),0,Math.PI*2); x.fill();
         }
         this.nebulaSprites.push(c);
       }
@@ -712,49 +725,51 @@
       for(let i=15000; i<30000; i++) this.starsL2.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(0.8, 1.5), a: random(0.3, 0.7), p: random(0.15, 0.25)});
       for(let i=0; i<2000; i++) this.starsL3.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(1.5, 4), hue: [200, 210, 340, 180, 60, 40, 280][Math.floor(random(0,7))], p: random(0.3, 0.5)});
       
-      // Asset Nebulae (Images) — Very Deep Background ONLY, drawn with Lighter
-      for(let i=0; i<25; i++) {
-        this.nebulae.push({
-          x: random(-PAD, W+PAD), y: random(-PAD, H+PAD),
-          scale: random(0.8, 1.6), angle: random(0, Math.PI*2),
-          alpha: random(0.4, 0.8), 
-          assetIdx: Math.floor(random(0, 2)),
-          isAsset: true, p: random(0.01, 0.05) // Pushed extremely far back
-        });
-      }
-      // Galaxies FIXED in world, MUCH SMALLER
-      for(let i=0; i<30; i++) {
+      // Galaxias Frente (p=0.88-0.92) - Menos cantidad, mayor escala
+      for(let i=0; i<8; i++) {
         this.galaxies.push({
           x: random(0, W), y: random(0, H),
-          scale: random(0.15, 0.35), // decreased scale from 0.25-0.55
+          scale: random(0.25, 0.45),
           angle: random(0, Math.PI*2),
-          alpha: random(0.6, 0.9),
+          alpha: random(0.5, 0.8),
           spriteIdx: Math.floor(random(0, this.galaxySprites.length)), 
-          p: random(0.93, 0.98)
+          p: random(0.88, 0.92)
+        });
+      }
+      // Galaxias Lejanas (p=0.96-0.99) - Mayor cantidad, escala muy reducida
+      for(let i=0; i<35; i++) {
+        this.galaxies.push({
+          x: random(0, W), y: random(0, H),
+          scale: random(0.08, 0.20),
+          angle: random(0, Math.PI*2),
+          alpha: random(0.3, 0.6),
+          spriteIdx: Math.floor(random(0, this.galaxySprites.length)), 
+          p: random(0.96, 0.99)
         });
       }
 
-      // Procedural Nebulae — DEEP background, SMALLER sizes
+      // Procedural Nebulae — Pequeñas, distribuidas, fijas al universo lejano
       for(let i=0; i<30; i++) {
         this.nebulae.push({
           x: random(-500, W+500), y: random(-500, H+500),
-          scale: random(0.2, 0.4), // decreased scale from 0.3-0.8
+          scale: random(0.15, 0.30), 
           angle: random(0, Math.PI*2),
-          alpha: random(0.10, 0.25),
+          alpha: random(0.15, 0.40),
           spriteIdx: Math.floor(random(0, this.nebulaSprites.length)),
-          isAsset: false, p: random(0.08, 0.20) 
+          isAsset: false, p: random(0.92, 0.96) 
         });
       }
       
-      // HD Asset Nebulae (Images) — VERY DEEP (ultima capa)
-      for(let i=0; i<15; i++) {
+      // HD Asset Nebulae (Images) — MUY pequeñas, súper lejanas y fijas al universo
+      // El parallax entre 0.96 y 0.99 asegura que se muevan poquísimo con respecto al fondo de pantalla
+      for(let i=0; i<8; i++) {
         this.nebulae.push({
-          x: random(-1000, W+1000), y: random(-1000, H+1000),
-          scale: random(0.15, 0.35), // decreased heavily
-          angle: random(0, Math.PI*2),
-          alpha: random(0.2, 0.4),
-          assetIdx: Math.floor(random(0, 2)),
-          isAsset: true, p: random(0.01, 0.05) // Ultima capa profunda
+           x: random(-1000, W+1000), y: random(-1000, H+1000),
+           scale: random(0.06, 0.18), // Muchísimo más pequeñas
+           angle: random(0, Math.PI*2),
+           alpha: random(0.15, 0.35), // Transparencia alta para integrarse
+           assetIdx: Math.floor(random(0, 2)),
+           isAsset: true, p: random(0.96, 0.99) 
         });
       }
       
@@ -799,7 +814,7 @@
          if(n.isAsset) continue;
          let spr = this.nebulaSprites[n.spriteIdx];
          if(!spr) continue;
-         let base = 700; // Match procedural canvas size
+         let base = 600; // Match procedural canvas size
          let w = base * n.scale, h = base * n.scale;
          let dx = n.x + camera.x * (1 - n.p); let dy = n.y + camera.y * (1 - n.p);
          if (dx > cL - w && dx < cR + w && dy > cT - h && dy < cB + h) {
