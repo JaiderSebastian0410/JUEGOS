@@ -507,151 +507,96 @@
       // 1. Array of real HD Nebula Images (Assets)
       const nebulaImages = [imgNebula1, imgNebula2];
       
-      // 2. HD Procedural Nebulae (FULL OPACITY sprites, controlled by globalAlpha at draw)
+      // 2. Procedural Nebulae (soft overlapping gradient clouds, NO strokes)
       this.nebulaSprites = [];
-      const nebPalettes = [
-        {outer:[192,56,43], mid:[231,76,60], inner:[26,188,156], accent:[41,128,185]},
-        {outer:[142,68,173], mid:[155,89,182], inner:[241,196,15], accent:[230,126,34]},
-        {outer:[39,174,96], mid:[46,204,113], inner:[22,160,133], accent:[26,188,156]},
-        {outer:[232,67,147], mid:[253,121,168], inner:[116,185,255], accent:[9,132,227]},
-        {outer:[225,112,85], mid:[250,177,160], inner:[0,206,201], accent:[9,132,227]},
-        {outer:[214,48,49], mid:[255,118,117], inner:[108,92,231], accent:[162,155,254]},
-        {outer:[0,184,148], mid:[85,239,196], inner:[253,203,110], accent:[243,156,18]},
-        {outer:[183,21,64], mid:[235,47,6], inner:[229,80,57], accent:[248,194,145]}
+      const nebColors = [
+        [[180,40,60],[220,80,80],[30,180,160]],   // Red-Cyan (Cassiopeia)
+        [[130,50,170],[180,100,200],[240,190,30]], // Purple-Gold (Star forming)
+        [[220,80,140],[255,130,170],[100,170,255]],// Pink-Blue (Orion)
+        [[40,160,100],[80,210,140],[20,130,110]],  // Green (Eagle)
+        [[200,100,50],[250,170,120],[20,200,190]], // Orange-Teal (Crab)
+        [[180,50,50],[240,100,100],[80,60,220]],   // Red-Indigo (Veil)
+        [[20,170,140],[70,230,190],[250,200,100]], // Teal-Amber (Ring)
+        [[170,30,60],[230,50,10],[230,80,60]],     // Crimson (Rosette)
+        [[60,100,200],[100,150,240],[200,180,255]],// Blue (Reflection)
+        [[200,150,50],[240,200,100],[180,100,200]] // Gold-Violet
       ];
-      for (const pal of nebPalettes) {
-        const sz = 512;
-        const c = document.createElement('canvas'); c.width=sz; c.height=sz;
-        const x = c.getContext('2d');
-        const cx = sz/2, cy = sz/2;
-        const [or,og,ob] = pal.outer, [mr,mg,mb] = pal.mid;
-        const [ir,ig,ib] = pal.inner, [ar,ag,ab] = pal.accent;
-        
-        // Layer 1: Outer halo (bright, full coverage)
-        const g1 = x.createRadialGradient(cx, cy, sz*0.02, cx, cy, sz*0.48);
-        g1.addColorStop(0, `rgba(${ir},${ig},${ib},0.8)`);
-        g1.addColorStop(0.3, `rgba(${or},${og},${ob},0.6)`);
-        g1.addColorStop(0.7, `rgba(${mr},${mg},${mb},0.3)`);
-        g1.addColorStop(1, 'rgba(0,0,0,0)');
-        x.fillStyle = g1;
-        x.beginPath(); x.ellipse(cx, cy, sz*0.46, sz*0.36, random(-0.4,0.4), 0, Math.PI*2); x.fill();
-        
-        // Layer 2: Inner core glow
-        const g2 = x.createRadialGradient(cx+random(-20,20), cy+random(-20,20), 0, cx, cy, sz*0.25);
-        g2.addColorStop(0, `rgba(${ir},${ig},${ib},0.9)`);
-        g2.addColorStop(0.6, `rgba(${mr},${mg},${mb},0.4)`);
-        g2.addColorStop(1, 'rgba(0,0,0,0)');
-        x.fillStyle = g2;
-        x.beginPath(); x.ellipse(cx, cy, sz*0.24, sz*0.18, random(-0.8,0.8), 0, Math.PI*2); x.fill();
-        
-        // Layer 3: Filament wisps
-        for(let f=0; f<16; f++) {
-          const angle = (f/16)*Math.PI*2 + random(-0.3,0.3);
-          const r1 = sz*random(0.06,0.12), r2 = sz*random(0.22,0.44);
-          const col = (f%2===0) ? pal.outer : pal.accent;
-          x.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},0.7)`;
-          x.lineWidth = random(3, 8); x.lineCap = 'round';
-          const cx1 = cx+Math.cos(angle+0.5)*r1*1.8, cy1 = cy+Math.sin(angle+0.5)*r1*1.8;
-          x.beginPath();
-          x.moveTo(cx+Math.cos(angle)*r1, cy+Math.sin(angle)*r1);
-          x.quadraticCurveTo(cx1, cy1, cx+Math.cos(angle)*r2, cy+Math.sin(angle)*r2);
-          x.stroke();
+      for(const cols of nebColors) {
+        const sz=400, c=document.createElement('canvas'); c.width=sz; c.height=sz;
+        const x=c.getContext('2d'), cx=sz/2, cy=sz/2;
+        // Multiple soft overlapping blobs
+        for(let layer=0; layer<6; layer++) {
+          const col = cols[layer % cols.length];
+          const ox=cx+random(-80,80), oy=cy+random(-60,60);
+          const rx=random(60,160), ry=random(50,130);
+          const g=x.createRadialGradient(ox,oy,0,ox,oy,Math.max(rx,ry));
+          g.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${random(0.4,0.7)})`);
+          g.addColorStop(0.5, `rgba(${col[0]},${col[1]},${col[2]},${random(0.1,0.3)})`);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          x.fillStyle=g;
+          x.beginPath(); x.ellipse(ox,oy,rx,ry,random(-1,1),0,Math.PI*2); x.fill();
         }
-        
-        // Layer 4: Gas knots
-        for(let b=0; b<12; b++) {
-          const bx=cx+random(-sz*0.3,sz*0.3), by=cy+random(-sz*0.25,sz*0.25);
-          const br=random(10,30);
-          const bg=x.createRadialGradient(bx,by,0,bx,by,br);
-          bg.addColorStop(0, `rgba(${ar},${ag},${ab},0.8)`); bg.addColorStop(1,'rgba(0,0,0,0)');
-          x.fillStyle=bg; x.beginPath(); x.arc(bx,by,br,0,Math.PI*2); x.fill();
-        }
-        
-        // Layer 5: Embedded stars
-        for(let s=0; s<40; s++) {
-          const sx=cx+random(-sz*0.38,sz*0.38), sy=cy+random(-sz*0.38,sz*0.38);
-          x.fillStyle=`rgba(255,255,255,${random(0.5,1.0)})`;
-          x.beginPath(); x.arc(sx,sy,random(1,3),0,Math.PI*2); x.fill();
+        // Tiny embedded stars
+        for(let s=0; s<20; s++) {
+          x.fillStyle=`rgba(255,255,255,${random(0.4,0.9)})`;
+          x.beginPath(); x.arc(cx+random(-120,120),cy+random(-100,100),random(0.5,2),0,Math.PI*2); x.fill();
         }
         this.nebulaSprites.push(c);
       }
 
-      // 3. High-Fidelity Galaxies with Depth/Tilt
+      // 3. Realistic Galaxy Sprites (tight logarithmic spirals)
       this.galaxySprites = [];
-      for (let k=0; k<12; k++) {
-        const c = document.createElement('canvas'); c.width=600; c.height=600;
-        const x = c.getContext('2d');
-        const h = [210, 340, 40, 280, 200, 320, 180, 30, 260, 350, 80, 160][k];
-        const tilt = random(0.15, 0.9); // Simulates viewing angle (0.15=edge-on, 0.9=face-on)
-        x.translate(300, 300); x.rotate(random(0, Math.PI*2));
+      const galConfigs = [
+        {hCore:45,hArm:210,arms:2,tight:0.22,tilt:0.8},  // Gold core, blue arms
+        {hCore:30,hArm:200,arms:3,tight:0.25,tilt:0.6},  // Orange core, cyan arms
+        {hCore:50,hArm:280,arms:2,tight:0.20,tilt:0.4},  // Yellow core, purple arms
+        {hCore:40,hArm:180,arms:4,tight:0.28,tilt:0.9},  // Warm core, teal arms
+        {hCore:35,hArm:340,arms:2,tight:0.18,tilt:0.3},  // Gold core, pink arms (edge-on)
+        {hCore:45,hArm:120,arms:3,tight:0.24,tilt:0.7},  // Yellow core, green arms
+        {hCore:30,hArm:240,arms:2,tight:0.20,tilt:0.5},  // Orange core, indigo arms
+        {hCore:50,hArm:20, arms:2,tight:0.22,tilt:0.85}  // Warm core, red arms
+      ];
+      for(const gc of galConfigs) {
+        const sz=400, c=document.createElement('canvas'); c.width=sz; c.height=sz;
+        const x=c.getContext('2d');
+        x.translate(sz/2, sz/2); x.rotate(random(0,Math.PI*2));
         
-        if (k % 3 === 0) { // SPIRAL GALAXY
-          // Central bulge
-          const rg = x.createRadialGradient(0,0,0, 0,0,60);
-          rg.addColorStop(0, '#ffe'); rg.addColorStop(0.4, `hsla(${h}, 80%, 75%, 0.8)`); rg.addColorStop(1, 'rgba(0,0,0,0)');
-          x.fillStyle = rg; x.beginPath(); x.ellipse(0,0,60,60*tilt,0,0,Math.PI*2); x.fill();
-          // Spiral arms
-          x.globalCompositeOperation = 'screen';
-          const arms = Math.floor(random(2, 4));
-          for(let arm=0; arm<arms; arm++) {
-            const off = (Math.PI*2/arms)*arm;
-            for(let i=0; i<800; i++) {
-              const a = i*0.006; const r = 25*Math.exp(0.32*a);
-              if(r>260) break;
-              const sprawl = (r/260)*30;
-              const tx = Math.cos(a+off)*r + random(-sprawl,sprawl);
-              const ty = (Math.sin(a+off)*r + random(-sprawl,sprawl)) * tilt;
-              const sz = random(0.4,2)*(1-r/280);
-              x.fillStyle = `hsla(${h+random(-25,25)}, 90%, ${60+random(0,20)}%, ${random(0.1,0.5)})`;
-              x.beginPath(); x.arc(tx,ty,sz,0,Math.PI*2); x.fill();
-              if(Math.random()<0.03) { // bright knots
-                x.fillStyle = '#fff'; x.beginPath(); x.arc(tx,ty,sz*1.5,0,Math.PI*2); x.fill();
-              }
-            }
-          }
-          // Dust lane (dark band through center for realism)
-          x.globalCompositeOperation = 'source-over';
-          x.fillStyle = 'rgba(0,0,0,0.15)';
-          x.beginPath(); x.ellipse(0,0,100,3*tilt,random(-0.3,0.3),0,Math.PI*2); x.fill();
-          
-        } else if (k % 3 === 1) { // ELLIPTICAL GALAXY
-          const g = x.createRadialGradient(0,0,0, 0,0,220);
-          g.addColorStop(0, '#ffe'); g.addColorStop(0.15, `hsla(${h}, 80%, 75%, 0.7)`);
-          g.addColorStop(0.6, `hsla(${h+20}, 60%, 40%, 0.2)`); g.addColorStop(1, 'rgba(0,0,0,0)');
-          x.fillStyle = g; x.beginPath(); x.ellipse(0,0,220,220*tilt,0,0,Math.PI*2); x.fill();
-          // Star scatter
-          x.globalCompositeOperation = 'screen';
-          for(let i=0; i<500; i++){
-            const rx = random(-200,200); const ry = random(-200*tilt, 200*tilt);
-            if(Math.sqrt(rx*rx + ry*ry/(tilt*tilt)) > 200) continue;
-            x.fillStyle = `hsla(${h+random(-20,30)}, 70%, 70%, ${random(0.05,0.3)})`;
-            x.beginPath(); x.arc(rx,ry,random(0.5,1.5),0,Math.PI*2); x.fill();
-          }
-          
-        } else { // BARRED SPIRAL
-          // Bar
-          const bg = x.createLinearGradient(-80,0,80,0);
-          bg.addColorStop(0,'rgba(0,0,0,0)'); bg.addColorStop(0.3, `hsla(${h},80%,70%,0.5)`);
-          bg.addColorStop(0.7, `hsla(${h},80%,70%,0.5)`); bg.addColorStop(1,'rgba(0,0,0,0)');
-          x.fillStyle=bg; x.fillRect(-100,-8*tilt,200,16*tilt);
-          // Central core
-          const cg = x.createRadialGradient(0,0,0,0,0,30);
-          cg.addColorStop(0,'#fff'); cg.addColorStop(0.5, `hsla(${h},100%,80%,0.8)`); cg.addColorStop(1,'rgba(0,0,0,0)');
-          x.fillStyle=cg; x.beginPath(); x.ellipse(0,0,30,30*tilt,0,0,Math.PI*2); x.fill();
-          // Arms from bar ends
-          x.globalCompositeOperation = 'screen';
-          for(let side=-1; side<=1; side+=2) {
-            for(let i=0; i<500; i++){
-              const a = i*0.008; const r = 20*Math.exp(0.3*a);
-              if(r>240) break;
-              const tx = side*80 + Math.cos(a*side)*r + random(-15,15);
-              const ty = (Math.sin(a*side)*r + random(-15,15))*tilt;
-              x.fillStyle = `hsla(${h+random(-20,20)},85%,65%,${random(0.1,0.4)})`;
-              x.beginPath(); x.arc(tx,ty,random(0.5,1.8),0,Math.PI*2); x.fill();
-            }
+        // Diffuse outer halo
+        const hg=x.createRadialGradient(0,0,0,0,0,sz*0.45);
+        hg.addColorStop(0,`hsla(${gc.hCore},60%,60%,0.15)`); hg.addColorStop(1,'rgba(0,0,0,0)');
+        x.fillStyle=hg; x.beginPath(); x.ellipse(0,0,sz*0.45,sz*0.45*gc.tilt,0,0,Math.PI*2); x.fill();
+        
+        // Spiral arms (dense star particles)
+        for(let arm=0; arm<gc.arms; arm++) {
+          const off=(Math.PI*2/gc.arms)*arm;
+          for(let i=0; i<1200; i++) {
+            const a=i*0.004, r=8*Math.exp(gc.tight*a);
+            if(r>sz*0.42) break;
+            const spread=(r/sz)*25;
+            const px=Math.cos(a+off)*r + random(-spread,spread);
+            const py=(Math.sin(a+off)*r + random(-spread,spread))*gc.tilt;
+            const dist=r/(sz*0.42);
+            // Color: blue/outer hue far from center, warm near center
+            const starH = dist>0.5 ? gc.hArm+random(-15,15) : gc.hCore+random(-15,15);
+            const starL = 50+random(0,30);
+            const starA = (1-dist)*random(0.3,0.8);
+            const starSz = random(0.3,1.5)*(1-dist*0.7);
+            x.fillStyle=`hsla(${starH},90%,${starL}%,${starA})`;
+            x.beginPath(); x.arc(px,py,starSz,0,Math.PI*2); x.fill();
           }
         }
-        x.globalCompositeOperation = 'source-over';
+        
+        // Bright core
+        const cg=x.createRadialGradient(0,0,0,0,0,20);
+        cg.addColorStop(0,'rgba(255,255,230,1)'); cg.addColorStop(0.3,`hsla(${gc.hCore},100%,80%,0.8)`);
+        cg.addColorStop(1,'rgba(0,0,0,0)');
+        x.fillStyle=cg; x.beginPath(); x.ellipse(0,0,20,20*gc.tilt,0,0,Math.PI*2); x.fill();
+        
+        // Core glow
+        const gg=x.createRadialGradient(0,0,0,0,0,50);
+        gg.addColorStop(0,`hsla(${gc.hCore},80%,70%,0.5)`); gg.addColorStop(1,'rgba(0,0,0,0)');
+        x.fillStyle=gg; x.beginPath(); x.ellipse(0,0,50,50*gc.tilt,0,0,Math.PI*2); x.fill();
+        
         this.galaxySprites.push(c);
       }
 
@@ -711,43 +656,36 @@
       for(let i=15000; i<30000; i++) this.starsL2.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(0.8, 1.5), a: random(0.3, 0.7), p: random(0.15, 0.25)});
       for(let i=0; i<2000; i++) this.starsL3.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(1.5, 4), hue: [200, 210, 340, 180, 60, 40, 280][Math.floor(random(0,7))], p: random(0.3, 0.5)});
       
-      // Galaxies in 3 background layers — CLEARLY VISIBLE
-      const galLayers = [
-        { p: 0.03, count: 10, scaleMin: 0.12, scaleMax: 0.28, alphaMin: 0.3, alphaMax: 0.5 },
-        { p: 0.07, count: 8,  scaleMin: 0.30, scaleMax: 0.60, alphaMin: 0.4, alphaMax: 0.7 },
-        { p: 0.12, count: 5,  scaleMin: 0.55, scaleMax: 1.0,  alphaMin: 0.5, alphaMax: 0.8 }
-      ];
-      for(const layer of galLayers) {
-        for(let i=0; i<layer.count; i++) {
-          this.galaxies.push({
-            x: random(0, W), y: random(0, H),
-            scale: random(layer.scaleMin, layer.scaleMax),
-            angle: random(0, Math.PI*2),
-            alpha: random(layer.alphaMin, layer.alphaMax),
-            spriteIdx: Math.floor(random(0, this.galaxySprites.length)), 
-            p: layer.p + random(-0.01, 0.01)
-          });
-        }
+      // Galaxies FIXED in world (p near 1.0 = don't follow ship), moderate sizes
+      for(let i=0; i<25; i++) {
+        this.galaxies.push({
+          x: random(0, W), y: random(0, H),
+          scale: random(0.08, 0.30),
+          angle: random(0, Math.PI*2),
+          alpha: random(0.5, 0.85),
+          spriteIdx: Math.floor(random(0, this.galaxySprites.length)), 
+          p: random(0.92, 0.98)  // Near 1.0 = stays in place, doesn't follow ship
+        });
       }
 
-      // Procedural Nebulae — VISIBLE and within world
-      for(let i=0; i<30; i++) {
+      // Procedural Nebulae (more of them, within world)
+      for(let i=0; i<50; i++) {
         this.nebulae.push({
-          x: random(-500, W+500), y: random(-500, H+500),
-          scale: random(0.4, 1.2), angle: random(0, Math.PI*2),
-          alpha: random(0.25, 0.5),
+          x: random(-200, W+200), y: random(-200, H+200),
+          scale: random(0.35, 1.0), angle: random(0, Math.PI*2),
+          alpha: random(0.2, 0.45),
           spriteIdx: Math.floor(random(0, this.nebulaSprites.length)),
-          isAsset: false, p: random(0.04, 0.10)
+          isAsset: false, p: random(0.85, 0.95)
         });
       }
       // Real HD asset nebulae (nebula_1.png, nebula_2.png)
-      for(let i=0; i<12; i++) {
+      for(let i=0; i<15; i++) {
         this.nebulae.push({
-          x: random(-500, W+500), y: random(-500, H+500),
-          scale: random(0.25, 0.65), angle: random(0, Math.PI*2),
-          alpha: random(0.2, 0.45),
+          x: random(-200, W+200), y: random(-200, H+200),
+          scale: random(0.2, 0.5), angle: random(0, Math.PI*2),
+          alpha: random(0.18, 0.38),
           assetIdx: Math.floor(random(0, 2)),
-          isAsset: true, p: random(0.03, 0.08)
+          isAsset: true, p: random(0.88, 0.96)
         });
       }
       
@@ -768,7 +706,7 @@
       ctx.fillRect(camera.x, camera.y, camera.width, camera.height);
       const cL = camera.x, cR = camera.x + camera.width, cT = camera.y, cB = camera.y + camera.height;
 
-      // 0. Nebulae (deepest layer) — use 'lighter' (additive) for visibility on dark bg
+      // 0. Nebulae (background layer)
       ctx.globalCompositeOperation = 'lighter';
       const assetNebs = [imgNebula1, imgNebula2];
       for(let n of this.nebulae) {
@@ -776,11 +714,11 @@
          if(n.isAsset) {
            spr = assetNebs[n.assetIdx];
            if(!spr || !spr.complete || spr.naturalWidth === 0) continue;
-           base = 600;
+           base = 500;
          } else {
            spr = this.nebulaSprites[n.spriteIdx];
            if(!spr) continue;
-           base = 512;
+           base = 400;
          }
          let w = base * n.scale, h = base * n.scale;
          let dx = n.x + camera.x * (1 - n.p); let dy = n.y + camera.y * (1 - n.p);
@@ -790,11 +728,11 @@
          }
       }
 
-      // 1. Galaxies
+      // 1. Galaxies (also background, lighter blend)
       for(let g of this.galaxies) {
          let spr = this.galaxySprites[g.spriteIdx];
          if(!spr) continue;
-         let w = 600 * g.scale, h = 600 * g.scale;
+         let w = 400 * g.scale, h = 400 * g.scale;
          let dx = g.x + camera.x * (1 - g.p); let dy = g.y + camera.y * (1 - g.p);
          if (dx > cL - w && dx < cR + w && dy > cT - h && dy < cB + h) {
             ctx.save(); ctx.globalAlpha = g.alpha; ctx.translate(dx, dy); ctx.rotate(g.angle);
