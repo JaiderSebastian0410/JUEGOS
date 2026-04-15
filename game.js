@@ -534,9 +534,9 @@
           const ox = pt.ox + random(-60, 60), oy = pt.oy + random(-60, 60);
           const rx = random(100, 250), ry = random(100, 250); 
           const g = x.createRadialGradient(0,0,0,0,0,rx);
-          g.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${random(0.3,0.6)})`);
-          g.addColorStop(0.5, `rgba(${col[0]},${col[1]},${col[2]},${random(0.1,0.2)})`);
-          g.addColorStop(1, 'rgba(0,0,0,0)');
+          g.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${random(0.4,0.7)})`);
+          g.addColorStop(0.5, `rgba(${col[0]},${col[1]},${col[2]},${random(0.1,0.3)})`);
+          g.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`); // Fix dark halo blending
           x.save(); x.translate(ox, oy); x.scale(1, ry/rx); x.rotate(random(0, Math.PI));
           x.fillStyle = g; x.beginPath(); x.arc(0,0,rx,0,Math.PI*2); x.fill(); x.restore();
         }
@@ -586,7 +586,7 @@
         bgGlow.addColorStop(0, `hsla(${gc.hCore}, 80%, 40%, 0.4)`);
         bgGlow.addColorStop(0.2, `hsla(${gc.hArm}, 60%, 20%, 0.15)`);
         bgGlow.addColorStop(0.6, `hsla(${gc.hArm}, 50%, 10%, 0.05)`);
-        bgGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        bgGlow.addColorStop(1, `hsla(${gc.hArm}, 50%, 10%, 0)`); // Transparent proper ending
         x.fillStyle = bgGlow;
         x.beginPath(); x.arc(0,0,sz*0.48,0,Math.PI*2); x.fill();
 
@@ -620,7 +620,7 @@
              const grad = x.createRadialGradient(px,py,0,px,py,random(15, 45));
              grad.addColorStop(0, `hsla(${hue}, 100%, 70%, 0.35)`);
              grad.addColorStop(0.5, `hsla(${hue}, 80%, 40%, 0.15)`);
-             grad.addColorStop(1, 'rgba(0,0,0,0)');
+             grad.addColorStop(1, `hsla(${hue}, 80%, 40%, 0)`);
              x.fillStyle = grad;
              x.beginPath(); x.arc(px,py,45,0,Math.PI*2); x.fill();
           }
@@ -649,7 +649,7 @@
         coreGlow.addColorStop(0.1, '#fff5e6');
         coreGlow.addColorStop(0.3, `hsla(${gc.hCore}, 100%, 80%, 0.8)`);
         coreGlow.addColorStop(0.6, `hsla(${gc.hCore}, 80%, 50%, 0.3)`);
-        coreGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        coreGlow.addColorStop(1, `hsla(${gc.hCore}, 80%, 50%, 0)`);
         x.fillStyle = coreGlow;
         x.beginPath(); x.arc(0,0,coreSize,0,Math.PI*2); x.fill();
 
@@ -705,48 +705,50 @@
       this.nebulae = []; this.planets = []; this.galaxies = [];
       
       const W = WORLD.WIDTH, H = WORLD.HEIGHT;
-      const PAD = 2000;
+      const PAD = 4000; // Massively expand boundaries to ensure visual overlap and density!
 
       // ULTRA HIGH STAR DENSITY
       for(let i=0; i<30000; i++) this.starsL1.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(0.2, 0.8), a: random(0.1, 0.4), p: random(0.05, 0.12)});
       for(let i=15000; i<30000; i++) this.starsL2.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(0.8, 1.5), a: random(0.3, 0.7), p: random(0.15, 0.25)});
       for(let i=0; i<2000; i++) this.starsL3.push({x: random(-PAD, W+PAD), y: random(-PAD, H+PAD), s: random(1.5, 4), hue: [200, 210, 340, 180, 60, 40, 280][Math.floor(random(0,7))], p: random(0.3, 0.5)});
       
-      // Galaxies across deep and mid background
-      for(let i=0; i<45; i++) {
+      // Galaxies across deep and mid background (Significantly increased quantity)
+      for(let i=0; i<85; i++) {
         this.galaxies.push({
           x: random(-PAD, W+PAD), y: random(-PAD, H+PAD),
-          scale: random(0.3, 0.85),
+          scale: random(0.6, 1.6), // Much bigger scale!
           angle: random(0, Math.PI*2),
-          alpha: random(0.75, 1.0),
+          alpha: random(0.8, 1.0),
           spriteIdx: Math.floor(random(0, this.galaxySprites.length)), 
-          p: random(0.1, 0.90) // Variety of depths
+          p: random(0.05, 0.95) // Visibility at absolutely all depths
         });
       }
 
-      // Procedural Nebulae — ALL layers, bright and numerous
-      for(let i=0; i<150; i++) {
+      // Procedural Nebulae — MASSIVE count, spanning entire depth spectrum
+      for(let i=0; i<350; i++) {
         this.nebulae.push({
           x: random(-PAD, W+PAD), y: random(-PAD, H+PAD),
-          scale: random(0.5, 1.2), angle: random(0, Math.PI*2),
-          alpha: random(0.4, 0.85), // High alpha so they pop!
+          scale: random(1.0, 3.0), // Massive clouds covering large areas
+          angle: random(0, Math.PI*2),
+          alpha: random(0.65, 0.95), // Highly visible opacities!
           spriteIdx: Math.floor(random(0, this.nebulaSprites.length)),
-          isAsset: false, p: random(0.05, 0.85) // Spread across all deep+mid layers
+          isAsset: false, p: random(0.05, 0.95) 
         });
       }
-      // Real HD asset nebulae — all layers too
-      for(let i=0; i<40; i++) {
+      
+      // Real HD asset nebulae
+      for(let i=0; i<80; i++) {
         this.nebulae.push({
           x: random(-PAD, W+PAD), y: random(-PAD, H+PAD),
-          scale: random(0.3, 0.8), angle: random(0, Math.PI*2),
-          alpha: random(0.3, 0.7),
+          scale: random(0.8, 2.0), angle: random(0, Math.PI*2),
+          alpha: random(0.6, 0.9), // Boosted alpha
           assetIdx: Math.floor(random(0, 2)),
-          isAsset: true, p: random(0.05, 0.85) // Spread across all layers
+          isAsset: true, p: random(0.05, 0.95)
         });
       }
       
       // Planets (Moderate sizes and better distribution)
-      for(let i=0; i<450; i++) {
+      for(let i=0; i<600; i++) {
         let isRing = Math.random() < 0.20;
         let colorIdx = Math.floor(random(0, pc.length));
         this.planets.push({
@@ -762,8 +764,11 @@
       ctx.fillRect(camera.x, camera.y, camera.width, camera.height);
       const cL = camera.x, cR = camera.x + camera.width, cT = camera.y, cB = camera.y + camera.height;
 
+      // Make sure we composite via source-over natively BEFORE drawing bright stars.
+      // This allows the black dust inside galaxies to obscure things beneath them without being nullified.
+      ctx.globalCompositeOperation = 'source-over';
+
       // 0. Nebulae (background layer)
-      ctx.globalCompositeOperation = 'lighter';
       const assetNebs = [imgNebula1, imgNebula2];
       for(let n of this.nebulae) {
          let spr, base;
@@ -774,7 +779,7 @@
          } else {
            spr = this.nebulaSprites[n.spriteIdx];
            if(!spr) continue;
-           base = 800; // Updated matching procedural canvas size
+           base = 800; 
          }
          let w = base * n.scale, h = base * n.scale;
          let dx = n.x + camera.x * (1 - n.p); let dy = n.y + camera.y * (1 - n.p);
@@ -784,7 +789,7 @@
          }
       }
 
-      // 1. Galaxies (lighter blend, 700px sprites)
+      // 1. Galaxies (700px sprites)
       for(let g of this.galaxies) {
          let spr = this.galaxySprites[g.spriteIdx];
          if(!spr) continue;
@@ -795,7 +800,6 @@
             ctx.drawImage(spr, -w/2, -h/2, w, h); ctx.restore();
          }
       }
-      ctx.globalCompositeOperation = 'source-over';
 
       // 2. Stars L1 (Deep)
       ctx.fillStyle = '#ffffff';
@@ -821,6 +825,7 @@
       }
 
       // 5. Huge Flickering Stars (L3)
+      ctx.globalCompositeOperation = 'lighter'; // Let bright giant stars pop through
       for(let s of this.starsL3) {
          let dx = s.x + camera.x * (1 - s.p); let dy = s.y + camera.y * (1 - s.p);
          let b = s.s * 8;
@@ -828,11 +833,12 @@
             let flick = 0.6 + Math.sin(frame*0.06 + s.x)*0.4;
             ctx.globalAlpha = 0.5 * flick;
             let g = ctx.createRadialGradient(dx, dy, 0, dx, dy, b);
-            g.addColorStop(0, `hsla(${s.hue}, 80%, 80%, 1)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+            g.addColorStop(0, `hsla(${s.hue}, 80%, 80%, 1)`); g.addColorStop(1, `hsla(${s.hue}, 80%, 80%, 0)`);
             ctx.fillStyle = g; ctx.fillRect(dx-b, dy-b, b*2, b*2);
             ctx.globalAlpha = 1.0; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(dx, dy, s.s*0.5, 0, Math.PI*2); ctx.fill();
          }
       }
+      ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1.0;
     }
   };
