@@ -1,0 +1,28 @@
+{
+  "name": "Space Defender Pro - Ultimate Edition",
+  "short_name": "Space Defender",
+  "description": "¡Defiende la frontera galáctica! Simulador de combate espacial con enemigos de élite, poderes tácticos y dificultad progresiva.",
+  "start_url": "./juego.html",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#050510",
+  "background_color": "#050510",
+  "lang": "es",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
