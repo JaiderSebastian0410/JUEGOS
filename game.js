@@ -18,8 +18,8 @@
   const SCORE_PER_MILESTONE = 1600;
   const ENEMY_UNLOCK_INTERVAL = 700;
 
-  const PLAYER_BASE_SPEED = 4.2;
-  const PLAYER_BOOST_SPEED = 7.2;
+  const PLAYER_BASE_SPEED = 6.2;
+  const PLAYER_BOOST_SPEED = 10.0;
 
   const POWER_TYPES = Object.freeze([
     { type: 'auto', color: '#f7ca18' },
@@ -29,16 +29,16 @@
   ]);
 
   const ENEMY_TYPES = Object.freeze([
-    { name: 'Morg', shape: 'circle', color: '#ff3366', size: 14, hp: 1, speed: 1.3, pts: 10 },
-    { name: 'Stinger', shape: 'triangle', color: '#e67e22', size: 12, hp: 1, speed: 2.6, pts: 15 },
-    { name: 'Titan', shape: 'square', color: '#9b59b6', size: 20, hp: 3, speed: 0.85, pts: 30 },
-    { name: 'Vanguard', shape: 'pentagon', color: '#2ecc71', size: 16, hp: 2, speed: 1.45, pts: 25 },
-    { name: 'Wasp', shape: 'hexagon', color: '#f1c40f', size: 14, hp: 2, speed: 1.9, pts: 20 },
-    { name: 'Pulsar', shape: 'star', color: '#3498db', size: 18, hp: 4, speed: 1.2, pts: 40 },
-    { name: 'Razor', shape: 'diamond', color: '#1abc9c', size: 10, hp: 2, speed: 3.1, pts: 35 },
-    { name: 'Interceptor', shape: 'cross', color: '#ff007f', size: 16, hp: 5, speed: 1.55, pts: 50 },
-    { name: 'Goliath', shape: 'octagon', color: '#ecf0f1', size: 24, hp: 8, speed: 0.72, pts: 80 },
-    { name: 'Overlord', shape: 'ufo', color: '#f1c40f', size: 28, hp: 12, speed: 1.08, pts: 150 },
+    { name: 'Morg', shape: 'circle', color: '#ff3366', size: 14, hp: 1, speed: 1.7, pts: 10 },
+    { name: 'Stinger', shape: 'triangle', color: '#e67e22', size: 12, hp: 1, speed: 3.3, pts: 15 },
+    { name: 'Titan', shape: 'square', color: '#9b59b6', size: 20, hp: 3, speed: 1.1, pts: 30 },
+    { name: 'Vanguard', shape: 'pentagon', color: '#2ecc71', size: 16, hp: 2, speed: 1.8, pts: 25 },
+    { name: 'Wasp', shape: 'hexagon', color: '#f1c40f', size: 14, hp: 2, speed: 2.4, pts: 20 },
+    { name: 'Pulsar', shape: 'star', color: '#3498db', size: 18, hp: 4, speed: 1.5, pts: 40 },
+    { name: 'Razor', shape: 'diamond', color: '#1abc9c', size: 10, hp: 2, speed: 3.9, pts: 35 },
+    { name: 'Interceptor', shape: 'cross', color: '#ff007f', size: 16, hp: 5, speed: 2.0, pts: 50 },
+    { name: 'Goliath', shape: 'octagon', color: '#ecf0f1', size: 24, hp: 8, speed: 0.95, pts: 80 },
+    { name: 'Overlord', shape: 'ufo', color: '#f1c40f', size: 28, hp: 12, speed: 1.4, pts: 150 },
   ]);
 
   /* =========================================================
@@ -305,7 +305,7 @@
      ========================================================= */
   const keys = {};
   const keyHoldTimers = {};
-  const KEY_HOLD_THRESHOLD = 12;
+  const KEY_HOLD_THRESHOLD = 1;
   let joystickOrigin = null;
   let joystickCurrent = null;
   let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -1084,7 +1084,7 @@
     }
     
     if (movingThisFrame) {
-      moveGrace = 10;
+      moveGrace = 20;
     } else if (moveGrace > 0) {
       moveGrace--;
     }
@@ -1116,7 +1116,7 @@
     let angleDiff = targetAngle - player.angle;
     angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
     if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    player.angle += angleDiff * 0.25;
+    player.angle += angleDiff * 0.75;
 
     // Apply Slowness Debuff
     if (player.debuffs.slow > 0) {
@@ -2316,15 +2316,30 @@
     window.toggleSound();
   };
 
-  window.openSettings = function() {
-    $('start-menu').classList.remove('active');
+  function openSettings() {
+    document.querySelectorAll('.overlay').forEach(m => m.classList.remove('active'));
     $('settings-menu').classList.add('active');
-  };
+  }
 
-  window.closeSettings = function() {
+  function closeSettings() {
     $('settings-menu').classList.remove('active');
     $('start-menu').classList.add('active');
-  };
+  }
+  
+  function openMultiplayer() {
+    $('start-menu').classList.remove('active');
+    $('multiplayer-menu').classList.add('active');
+  }
+  
+  function closeMultiplayer() {
+    $('multiplayer-menu').classList.remove('active');
+    $('start-menu').classList.add('active');
+  }
+
+  window.openSettings = openSettings;
+  window.closeSettings = closeSettings;
+  window.openMultiplayer = openMultiplayer;
+  window.closeMultiplayer = closeMultiplayer;
 
   let countdownRAF = null;
   let countdownInterval = null; // kept for cancel compatibility
@@ -2705,11 +2720,16 @@
       
       this.players.set(this.playerId, { id: this.playerId, name: name, isHost: true });
 
-      // Initialize PeerJS for Host
+      // Initialize PeerJS for Host - Explicitly use public cloud
       try {
-        this.peer = new Peer('sdpro-' + this.roomId);
+        this.peer = new Peer('sdpro-' + this.roomId, {
+          host: '0.peerjs.com',
+          port: 443,
+          secure: true,
+          debug: 3
+        });
       } catch (e) {
-        MP.showError('Error al iniciar PeerJS.'); return;
+        MP.showError('Error al iniciar PeerJS: ' + e.message); return;
       }
       
       this.peer.on('open', (id) => {
@@ -2785,7 +2805,12 @@
       this.isHost = false;
       
       try {
-        this.peer = new Peer(); // random client ID
+        this.peer = new Peer({
+          host: '0.peerjs.com',
+          port: 443,
+          secure: true,
+          debug: 2
+        }); // random client ID
       } catch (e) {
         MP.showError('Error al iniciar PeerJS.'); return;
       }
@@ -2978,28 +3003,6 @@
           showAnnouncement('💀 ' + (msg.name || 'Aliado') + ' fue destruido');
           break;
 
-        case 'game_over':
-          // Other player's game ended
-          showAnnouncement('📡 Aliado reporta fin de misión');
-          break;
-
-        case 'error':
-          MP.showError(msg.message);
-          break;
-      }
-    },
-          showAnnouncement('💀 ' + (msg.name || 'Aliado') + ' fue destruido');
-          break;
-
-        case 'game_over':
-          // Other player's game ended
-          showAnnouncement('📡 Aliado reporta fin de misión');
-          break;
-
-        case 'error':
-          MP.showError(msg.message);
-          break;
-
         case 'pong':
           break;
       }
@@ -3127,15 +3130,6 @@
     MP.requestStartGame();
   };
 
-  window.mpCopyRoomId = function() {
-    const code = $('mp-room-id-display');
-    if (code) {
-      navigator.clipboard.writeText(code.innerText).then(() => {
-        showAnnouncement('📋 Código copiado');
-      }).catch(() => {});
-    }
-  };
-
   /* =========================================================
      EXPOSE GLOBALS (for HTML onclick handlers)
      ========================================================= */
@@ -3145,6 +3139,55 @@
   window.switchTab = switchTab;
   window.installApp = installApp;
   window.hideInstallBanner = hideInstallBanner;
+  window.selectSkin = selectSkin;
+  window.uploadSkin = uploadSkin;
+  window.openSettings = openSettings;
+  window.closeSettings = closeSettings;
+  window.openMultiplayer = openMultiplayer;
+  window.closeMultiplayer = closeMultiplayer;
+  window.startGame = startGame;
+  window.exitGame = exitGame;
+  window.pauseGame = pauseGame;
+  window.toggleSound = toggleSound;
+  window.updateVolume = updateVolume;
+  window.retryGame = () => startCountdown(3);
+  
+  window.openHistory = function() {
+    const history = Storage.getHistory();
+    const body = $('history-body');
+    if (!body) return;
+    body.innerHTML = '';
+    history.forEach((h, i) => {
+      const row = `<tr class="history-row">
+        <td>${h.date || 'N/A'}</td>
+        <td>${h.mode || 'N/A'}</td>
+        <td>${h.score}</td>
+        <td>${h.kills}</td>
+        <td>${h.time}s</td>
+        <td><button onclick="Storage.deleteHistoryItem(${i}); window.openHistory();" class="delete-btn">❌</button></td>
+      </tr>`;
+      body.innerHTML += row;
+    });
+    $('settings-menu').classList.remove('active');
+    $('history-menu').classList.add('active');
+  };
+  window.clearHistory = function() { Storage.clearHistory(); window.openHistory(); };
+  window.closeHistory = function() { $('history-menu').classList.remove('active'); $('settings-menu').classList.add('active'); };
+
+  window.choosePremiumPower = function(type) {
+    if (type === 'life') { player.vida++; createFloatingText(player.x, player.y, "❤ +1 VIDA", "#ff007f"); SFX.powerup(); }
+    else if (type === 'ultra') { ultraEnergy = ULTRA_MAX; createFloatingText(player.x, player.y, "⚡ ULTRA LISTO", "#ff007f"); SFX.powerup(); }
+    else { player.powers[type] += PREMIUM_DURATION; SFX.powerup(); }
+    $('levelup-menu').classList.remove('active');
+    gameState = 'PLAYING';
+    if (!animationId) animationId = requestAnimationFrame(gameLoop);
+  };
+
+  window.mpCreateRoom = () => MP.createRoom();
+  window.mpJoinRoom = () => MP.joinRoom();
+  window.mpSetDifficulty = (el) => MP.setDifficulty(el.value);
+  window.mpStartGame = () => MP.startGame();
+  window.mpCopyRoomId = () => MP.copyRoomId();
   window.MP = MP;
 
 })();
