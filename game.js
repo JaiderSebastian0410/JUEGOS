@@ -312,6 +312,7 @@
   let isFiring = false;
   let mouseX = 0, mouseY = 0;
   let isMouseDown = false;
+  let moveGrace = 0;
 
   window.selectSkin = function(type) {
     player.skin.type = type;
@@ -1068,16 +1069,24 @@
       ['a','A','ArrowLeft', -1, 0], ['d','D','ArrowRight', 1, 0]
     ];
     let kbDirX = 0, kbDirY = 0;
+    let movingThisFrame = false;
     for (const [k1, k2, k3, dx, dy] of movKeys) {
       if (keys[k1] || keys[k2] || keys[k3]) {
         const hk = k1;
         keyHoldTimers[hk] = (keyHoldTimers[hk] || 0) + 1;
         kbDirX += dx; kbDirY += dy;
-        if (keyHoldTimers[hk] >= KEY_HOLD_THRESHOLD || isMobile) {
+        if (keyHoldTimers[hk] >= KEY_HOLD_THRESHOLD || moveGrace > 0 || isMobile) {
           moveX += dx * moveSpeed;
           moveY += dy * moveSpeed;
+          movingThisFrame = true;
         }
       }
+    }
+    
+    if (movingThisFrame) {
+      moveGrace = 10;
+    } else if (moveGrace > 0) {
+      moveGrace--;
     }
 
     // Virtual Joystick (mobile)
@@ -2618,94 +2627,217 @@
      MULTIPLAYER MODULE
      ========================================================= */
   const MP = {
-    ws: null,
+    peer: null,
+    isHost: false,
+    hostConn: null, // For clients
+    clientConns: new Map(), // For host: peerId -> conn
     connected: false,
     roomId: null,
     playerId: null,
     hostId: null,
+    players: new Map(), // id -> { id, name, isHost }
     isMultiplayer: false,
-    remotePlayers: new Map(), // id -> {x,y,angle,skin,powers,shield,vida,name,lastUpdate}
-    remoteBullets: [],        // visual-only bullets from allies
+    remotePlayers: new Map(), 
+    remoteBullets: [],        
     lastStateSend: 0,
-    STATE_INTERVAL: 50,       // ms between state broadcasts
+    STATE_INTERVAL: 50,       
 
-    getServerUrl() {
-      const loc = window.location;
-      const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${proto}//${loc.host}/ws`;
-    },
-
-    connect(callback) {
-      if (this.ws) {
-        if (this.ws.readyState === 1) {
-          if (callback) callback();
-          return;
-        } else if (this.ws.readyState === 0) {
-          const old = this.ws.onopen;
-          this.ws.onopen = () => { if (old) old(); if (callback) callback(); };
-          return;
-        }
-      }
-      try {
-        this.ws = new WebSocket(this.getServerUrl());
-      } catch(e) {
-        MP.showError('No se pudo conectar al servidor.'); return;
-      }
-      this.ws.onopen = () => { this.connected = true; if (callback) callback(); };
-      this.ws.onclose = () => {
-        this.connected = false;
-        if (this.isMultiplayer && gameState === 'PLAYING') {
-          showAnnouncement('⚠ CONEXIÓN PERDIDA');
-        }
-      };
-      this.ws.onerror = () => { MP.showError('Error de conexión con el servidor.'); };
-      this.ws.onmessage = (evt) => {
-        try { this.onMessage(JSON.parse(evt.data)); } catch(e) {}
-      };
+    generateId() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let id = '';
+      for(let i=0; i<6; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
+      return id;
     },
 
     disconnect() {
-      if (this.ws) { try { this.ws.close(); } catch(e){} this.ws = null; }
+      if (this.peer) { this.peer.destroy(); this.peer = null; }
+      this.isHost = false;
+      this.hostConn = null;
+      this.clientConns.clear();
       this.connected = false;
       this.isMultiplayer = false;
       this.roomId = null;
       this.playerId = null;
       this.hostId = null;
+      this.players.clear();
       this.remotePlayers.clear();
       this.remoteBullets = [];
     },
 
     send(msg) {
-      if (this.ws && this.ws.readyState === 1) {
-        this.ws.send(JSON.stringify(msg));
+      if (this.isHost) {
+        // Host broadcasts to all connected clients
+        for (const conn of this.clientConns.values()) {
+          if (conn.open) conn.send(msg);
+        }
+      } else {
+        // Client sends to Host
+        if (this.hostConn && this.hostConn.open) {
+          this.hostConn.send(msg);
+        }
       }
     },
 
+    // Host relays a message to all clients EXCEPT the original sender
+    relay(msg, excludeId) {
+      if (!this.isHost) return;
+      for (const [id, conn] of this.clientConns) {
+        if (id !== excludeId && conn.open) {
+          conn.send(msg);
+        }
+      }
+    },
+
+    getPlayerList() {
+      return Array.from(this.players.values());
+    },
+
     createRoom() {
+      if (typeof Peer === 'undefined') { MP.showError('PeerJS no cargado. Revisa conexión.'); return; }
       const nameEl = $('mp-player-name');
       const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
-      this.connect(() => {
-        this.send({ type: 'create_room', name });
+      
+      this.disconnect();
+      this.roomId = this.generateId();
+      this.isHost = true;
+      this.playerId = 'host-' + this.roomId;
+      this.hostId = this.playerId;
+      
+      this.players.set(this.playerId, { id: this.playerId, name: name, isHost: true });
+
+      // Initialize PeerJS for Host
+      try {
+        this.peer = new Peer('sdpro-' + this.roomId);
+      } catch (e) {
+        MP.showError('Error al iniciar PeerJS.'); return;
+      }
+      
+      this.peer.on('open', (id) => {
+        this.connected = true;
+        this.onMessage({
+          type: 'room_created',
+          roomId: this.roomId,
+          playerId: this.playerId,
+          players: this.getPlayerList()
+        });
+      });
+
+      this.peer.on('connection', (conn) => {
+        conn.on('data', (msg) => {
+          if (msg.type === 'join') {
+            const newPlayerId = conn.peer;
+            this.clientConns.set(newPlayerId, conn);
+            this.players.set(newPlayerId, { id: newPlayerId, name: msg.name, isHost: false });
+            
+            // Send join confirmation to new client
+            conn.send({
+              type: 'room_joined',
+              roomId: this.roomId,
+              playerId: newPlayerId,
+              hostId: this.hostId,
+              players: this.getPlayerList(),
+              difficulty: $('mp-difficulty') ? $('mp-difficulty').value : 'medio'
+            });
+
+            // Inform others and update local UI
+            const joinedMsg = { type: 'player_joined', newPlayer: { id: newPlayerId, name: msg.name }, players: this.getPlayerList() };
+            this.relay(joinedMsg, newPlayerId);
+            this.onMessage(joinedMsg);
+
+          } else {
+            // Relay in-game message from client
+            msg.id = conn.peer; // ensure ID is correct
+            this.relay(msg, conn.peer);
+            this.onMessage(msg);
+          }
+        });
+
+        conn.on('close', () => {
+          if (this.players.has(conn.peer)) {
+            const p = this.players.get(conn.peer);
+            this.players.delete(conn.peer);
+            this.clientConns.delete(conn.peer);
+            const leftMsg = { type: 'player_left', id: conn.peer, name: p.name, players: this.getPlayerList() };
+            this.relay(leftMsg, conn.peer);
+            this.onMessage(leftMsg);
+          }
+        });
+      });
+
+      this.peer.on('error', (err) => {
+        console.error('[PeerJS Host Error]', err);
+        MP.showError('Error al crear sala o ID en uso.');
+        this.disconnect();
       });
     },
 
     joinRoom() {
+      if (typeof Peer === 'undefined') { MP.showError('PeerJS no cargado. Revisa conexión.'); return; }
       const nameEl = $('mp-player-name');
       const codeEl = $('mp-room-code-input');
       const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
       const code = (codeEl ? codeEl.value.trim().toUpperCase() : '');
+      
       if (!code || code.length < 4) { MP.showError('Ingresa un código de sala válido.'); return; }
-      this.connect(() => {
-        this.send({ type: 'join_room', roomId: code, name });
+      
+      this.disconnect();
+      this.roomId = code;
+      this.isHost = false;
+      
+      try {
+        this.peer = new Peer(); // random client ID
+      } catch (e) {
+        MP.showError('Error al iniciar PeerJS.'); return;
+      }
+
+      this.peer.on('open', (id) => {
+        this.playerId = id;
+        this.hostId = 'host-' + code;
+        
+        this.hostConn = this.peer.connect('sdpro-' + code);
+
+        this.hostConn.on('open', () => {
+          this.connected = true;
+          this.hostConn.send({ type: 'join', name: name });
+        });
+
+        this.hostConn.on('data', (msg) => {
+          this.onMessage(msg);
+        });
+
+        this.hostConn.on('close', () => {
+          this.onMessage({ type: 'error', message: 'El anfitrión ha cerrado la sala.' });
+          this.disconnect();
+        });
+        
+        this.hostConn.on('error', (err) => {
+          MP.showError('Error en conexión con la sala.');
+          this.disconnect();
+        });
+      });
+
+      this.peer.on('error', (err) => {
+        console.error('[PeerJS Client Error]', err);
+        MP.showError('Sala no encontrada o error de red.');
+        this.disconnect();
       });
     },
 
     setDifficulty(diff) {
-      this.send({ type: 'set_difficulty', difficulty: diff });
+      if (!this.isHost) return;
+      const msg = { type: 'difficulty_changed', difficulty: diff };
+      this.send(msg);
     },
 
     requestStartGame() {
-      this.send({ type: 'start_game' });
+      if (!this.isHost) return;
+      const msg = {
+        type: 'game_start',
+        difficulty: $('mp-difficulty') ? $('mp-difficulty').value : 'medio',
+        players: this.getPlayerList()
+      };
+      this.send(msg);
+      this.onMessage(msg); // host processes its own start
     },
 
     sendState() {
@@ -2714,6 +2846,7 @@
       this.lastStateSend = now;
       this.send({
         type: 'player_state',
+        id: this.playerId,
         x: player.x, y: player.y,
         angle: player.angle,
         skin: player.skin.type,
@@ -2727,12 +2860,12 @@
     },
 
     sendShoot(bx, by, bdx, bdy, color, source) {
-      this.send({ type: 'player_shoot', x: bx, y: by, dx: bdx, dy: bdy, color, source });
+      this.send({ type: 'player_shoot', id: this.playerId, x: bx, y: by, dx: bdx, dy: bdy, color, source });
     },
 
     sendDeath() {
       const nameEl = $('mp-player-name');
-      this.send({ type: 'player_died', name: nameEl ? nameEl.value.trim() : 'Piloto' });
+      this.send({ type: 'player_died', id: this.playerId, name: nameEl ? nameEl.value.trim() : 'Piloto' });
     },
 
     sendGameOver() {
@@ -2784,15 +2917,6 @@
           showAnnouncement('🚀 ' + msg.name + ' salió');
           break;
 
-        case 'host_changed':
-          this.hostId = msg.hostId;
-          const amHost = this.playerId === msg.hostId;
-          this.updateLobbyUI(msg.players, amHost);
-          if ($('mp-start-btn')) $('mp-start-btn').style.display = amHost ? 'inline-block' : 'none';
-          if ($('mp-diff-select')) $('mp-diff-select').style.display = amHost ? 'block' : 'none';
-          if (amHost) showAnnouncement('👑 ¡Eres el nuevo anfitrión!');
-          break;
-
         case 'difficulty_changed':
           if ($('mp-difficulty')) $('mp-difficulty').value = msg.difficulty;
           break;
@@ -2819,6 +2943,7 @@
           break;
 
         case 'player_state': {
+          if (msg.id === this.playerId) break; // Don't process our own echoed state
           let rp = this.remotePlayers.get(msg.id);
           if (!rp) {
             rp = { x: msg.x, y: msg.y, angle: msg.angle, skin: msg.skin || 'classic',
@@ -2837,6 +2962,7 @@
         }
 
         case 'player_shoot': {
+          if (msg.id === this.playerId) break;
           // Add visual-only bullet
           if (this.remoteBullets.length < 100) {
             this.remoteBullets.push({
@@ -2848,6 +2974,20 @@
         }
 
         case 'player_died':
+          if (msg.id === this.playerId) break;
+          showAnnouncement('💀 ' + (msg.name || 'Aliado') + ' fue destruido');
+          break;
+
+        case 'game_over':
+          // Other player's game ended
+          showAnnouncement('📡 Aliado reporta fin de misión');
+          break;
+
+        case 'error':
+          MP.showError(msg.message);
+          break;
+      }
+    },
           showAnnouncement('💀 ' + (msg.name || 'Aliado') + ' fue destruido');
           break;
 
