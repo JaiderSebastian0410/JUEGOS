@@ -2373,6 +2373,7 @@
     
     $('pause-btn').style.display = 'block';
     $('end-practice-btn').style.display = isPractice ? 'block' : 'none';
+    if ($('mp-end-game-btn')) $('mp-end-game-btn').style.display = MP.isMultiplayer ? 'block' : 'none';
 
     const countEl = $('countdown');
     countEl.style.display = 'block';
@@ -2726,7 +2727,16 @@
           host: '0.peerjs.com',
           port: 443,
           secure: true,
-          debug: 3
+          debug: 2,
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+              { urls: 'stun:stun2.l.google.com:19302' },
+              { urls: 'stun:stun3.l.google.com:19302' },
+              { urls: 'stun:stun4.l.google.com:19302' }
+            ]
+          }
         });
       } catch (e) {
         MP.showError('Error al iniciar PeerJS: ' + e.message); return;
@@ -2809,7 +2819,16 @@
           host: '0.peerjs.com',
           port: 443,
           secure: true,
-          debug: 2
+          debug: 2,
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+              { urls: 'stun:stun2.l.google.com:19302' },
+              { urls: 'stun:stun3.l.google.com:19302' },
+              { urls: 'stun:stun4.l.google.com:19302' }
+            ]
+          }
         }); // random client ID
       } catch (e) {
         MP.showError('Error al iniciar PeerJS.'); return;
@@ -2976,9 +2995,38 @@
             }
           }
           // Hide lobby, start game
-          $('multiplayer-menu').classList.remove('active');
+          if ($('mp-lobby')) $('mp-lobby').classList.remove('active');
+          if ($('multiplayer-menu')) $('multiplayer-menu').classList.remove('active');
           window.setupDifficulty(msg.difficulty);
-          startCountdown(3);
+          window.startCountdown(3);
+          break;
+
+        case 'return_to_lobby':
+          MP.isMultiplayer = true; // explicitly keeping it enabled
+          gameState = 'START_SCREEN';
+          if (animationId) cancelAnimationFrame(animationId);
+          animationId = null;
+          if (window.countdownInterval) { clearInterval(window.countdownInterval); window.countdownInterval = null; }
+          if ($('pause-menu')) $('pause-menu').classList.remove('active');
+          if ($('game-over')) $('game-over').style.display = 'none';
+          if ($('start-menu')) $('start-menu').classList.remove('active');
+          if ($('mp-create-join')) $('mp-create-join').style.display = 'none';
+          if ($('mp-lobby')) $('mp-lobby').style.display = 'flex';
+          if ($('multiplayer-menu')) $('multiplayer-menu').classList.add('active');
+          if ($('pause-btn')) $('pause-btn').style.display = 'none';
+          if ($('countdown')) $('countdown').style.display = 'none';
+          // Clean the game state to ensure nothing renders
+          if (typeof enemies !== 'undefined') {
+            for (let i = 0; i < enemies.length; i++) EnemyPool.release(enemies[i]);
+            bullets = []; enemies = []; powerUps = []; hearts = [];
+          }
+          if (typeof ctx !== 'undefined' && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+          break;
+
+        case 'player_quit_game':
+          if (this.isHost && this.remotePlayers.has(msg.id)) {
+            this.remotePlayers.get(msg.id).vida = 0; // kill them off locally so they vanish
+          }
           break;
 
         case 'player_state': {
@@ -3202,6 +3250,16 @@
   window.mpSetDifficulty = (el) => MP.setDifficulty(el.value);
   window.mpStartGame = () => MP.requestStartGame();
   window.mpCopyRoomId = () => MP.copyRoomId();
+  window.mpEndGame = function() {
+    if (!MP.isMultiplayer) return;
+    if (MP.isHost) {
+      MP.send({ type: 'return_to_lobby' });
+      MP.onMessage({ type: 'return_to_lobby' });
+    } else {
+      MP.send({ type: 'player_quit_game', id: MP.playerId });
+      MP.onMessage({ type: 'return_to_lobby' });
+    }
+  };
   window.MP = MP;
 
 })();
