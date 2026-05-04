@@ -7,7 +7,6 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const WebSocket = require('ws');
 
 // ---- HTTP Static File Server ----
 const MIME_TYPES = {
@@ -88,30 +87,130 @@ class Room {
   }
 }
 
-// ---- WebSocket Server (Using ws library) ----
-const wss = new WebSocket.Server({ noServer: true });
+// ---- Raw WebSocket Implementation ----
+function acceptWebSocket(req, socket) {
+  const key = req.headers['sec-websocket-key'];
+  if (!key) { socket.destroy(); return; }
 
-wss.on('connection', (ws) => {
-  console.log('[WS] New WebSocket connection established');
-  ws.on('message', (message) => {
-    try {
-      const msg = JSON.parse(message.toString());
-      handleMessage(ws, msg);
-    } catch (e) { /* ignore */ }
+  const acceptKey = crypto
+    .createHash('sha1')
+    .update(key + '258EAFA5-E914-47DA-95CA-5AB9FC6B06AE')
+    .digest('base64');
+
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\n' +
+    'Upgrade: websocket\r\n' +
+    'Connection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
+    '\r\n'
+  );
+
+  const ws = {
+    socket,
+    readyState: 1, // OPEN
+    _buffer: Buffer.alloc(0),
+  };
+
+  socket.on('data', (data) => {
+    ws._buffer = Buffer.concat([ws._buffer, data]);
+    while (ws._buffer.length >= 2) {
+      const frame = parseFrame(ws._buffer);
+      if (!frame) break;
+      ws._buffer = ws._buffer.slice(frame.totalLength);
+
+      if (frame.opcode === 0x8) {
+        // Close
+        ws.readyState = 3;
+        socket.end();
+        handleDisconnect(ws);
+        return;
+      }
+      if (frame.opcode === 0x9) {
+        // Ping -> Pong
+        sendFrame(socket, frame.payload, 0xA);
+        continue;
+      }
+      if (frame.opcode === 0x1) {
+        // Text
+        try {
+          const msg = JSON.parse(frame.payload.toString('utf8'));
+          handleMessage(ws, msg);
+        } catch (e) { /* ignore malformed */ }
+      }
+    }
   });
 
-  ws.on('close', () => {
+  socket.on('close', () => {
+    ws.readyState = 3;
     handleDisconnect(ws);
   });
 
-  ws.on('error', () => {
+  socket.on('error', () => {
+    ws.readyState = 3;
     handleDisconnect(ws);
   });
-});
+}
+
+function parseFrame(buf) {
+  if (buf.length < 2) return null;
+  const opcode = buf[0] & 0x0F;
+  const masked = !!(buf[1] & 0x80);
+  let payloadLen = buf[1] & 0x7F;
+  let offset = 2;
+
+  if (payloadLen === 126) {
+    if (buf.length < 4) return null;
+    payloadLen = buf.readUInt16BE(2);
+    offset = 4;
+  } else if (payloadLen === 127) {
+    if (buf.length < 10) return null;
+    payloadLen = Number(buf.readBigUInt64BE(2));
+    offset = 10;
+  }
+
+  const maskSize = masked ? 4 : 0;
+  const totalLength = offset + maskSize + payloadLen;
+  if (buf.length < totalLength) return null;
+
+  let payload = Buffer.from(buf.slice(offset + maskSize, totalLength));
+  if (masked) {
+    const mask = buf.slice(offset, offset + 4);
+    for (let i = 0; i < payload.length; i++) {
+      payload[i] ^= mask[i % 4];
+    }
+  }
+
+  return { opcode, payload, totalLength };
+}
+
+function sendFrame(socket, data, opcode = 0x1) {
+  if (!socket.writable) return;
+  const payload = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
+  const len = payload.length;
+  let header;
+
+  if (len < 126) {
+    header = Buffer.alloc(2);
+    header[0] = 0x80 | opcode;
+    header[1] = len;
+  } else if (len < 65536) {
+    header = Buffer.alloc(4);
+    header[0] = 0x80 | opcode;
+    header[1] = 126;
+    header.writeUInt16BE(len, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x80 | opcode;
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(len), 2);
+  }
+
+  socket.write(Buffer.concat([header, payload]));
+}
 
 function wsSend(ws, data) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(typeof data === 'string' ? data : JSON.stringify(data));
+  if (ws.readyState === 1) {
+    sendFrame(ws.socket, data);
   }
 }
 
@@ -195,8 +294,8 @@ function handleMessage(ws, msg) {
       if (!info) return;
       const room = rooms.get(info.roomId);
       if (!room || info.playerId !== room.hostId) return;
-      if (room.players.size < 1) {
-        wsSend(ws, JSON.stringify({ type: 'error', message: 'No hay jugadores en la sala.' }));
+      if (room.players.size < 2) {
+        wsSend(ws, JSON.stringify({ type: 'error', message: 'Se necesitan al menos 2 jugadores.' }));
         return;
       }
       room.gameStarted = true;
@@ -353,14 +452,11 @@ function handleDisconnect(ws) {
   console.log(`[ROOM] ${playerName} left ${info.roomId}`);
 }
 
+// ---- Upgrade HTTP to WebSocket ----
 server.on('upgrade', (req, socket, head) => {
-  console.log(`[UPGRADE] Request for: ${req.url}`);
   if (req.url === '/ws') {
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req);
-    });
+    acceptWebSocket(req, socket);
   } else {
-    console.log(`[UPGRADE] Rejected (invalid URL): ${req.url}`);
     socket.destroy();
   }
 });
