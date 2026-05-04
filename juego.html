@@ -375,6 +375,11 @@
         ▶ INICIAR PARTIDA
       </button>
 
+      <!-- Leave Room Button (Everyone) -->
+      <button class="btn secondary" style="width:100%; border-color:#ff3366; color:#ff3366; font-size:1rem;" onclick="mpLeaveRoom()">
+        ⬅ SALIR DE LA SALA / MENÚ
+      </button>
+
       <p id="mp-waiting-msg" style="font-size:0.85rem; color:#666; margin:0;">Esperando que el anfitrión inicie la partida...</p>
     </div>
 
@@ -390,7 +395,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <!-- Game Engine -->
-  <script src="game.js?v=27"></script>
+  <script src="game.js?v=28"></script>
 
   <!-- Menu Background Animation -->
   <script>

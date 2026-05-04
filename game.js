@@ -2968,8 +2968,70 @@
       if (el) { el.innerText = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 4000); }
     },
 
+    updateAndDrawRemote() {
+      if (!this.isMultiplayer) return;
+      
+      for (const [id, rp] of this.remotePlayers.entries()) {
+        if (rp.vida <= 0) continue; 
+
+        rp.x += (rp.targetX - rp.x) * 0.2;
+        rp.y += (rp.targetY - rp.y) * 0.2;
+        rp.angle += (rp.targetAngle - rp.angle) * 0.2;
+
+        ctx.save();
+        ctx.translate(rp.x, rp.y);
+        ctx.rotate(rp.angle);
+        const activeSkin = typeof window.SKINS !== 'undefined' ? window.SKINS[rp.skin] || window.SKINS['classic'] : { color: '#fff' };
+        if (activeSkin.image && activeSkin.image.complete) {
+          ctx.drawImage(activeSkin.image, -activeSkin.width/2, -activeSkin.height/2, activeSkin.width, activeSkin.height);
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(15, 0); ctx.lineTo(-10, 10); ctx.lineTo(-10, -10);
+          ctx.fillStyle = activeSkin.color || '#fff';
+          ctx.fill();
+        }
+        
+        if (rp.shield) {
+          ctx.beginPath();
+          ctx.arc(0, 0, 30, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '10px "Inter", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(rp.name, rp.x, rp.y - 35);
+        
+        ctx.fillStyle = 'red';
+        ctx.fillRect(rp.x - 20, rp.y - 30, 40, 4);
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(rp.x - 20, rp.y - 30, 40 * (rp.vida / 100), 4);
+      }
+
+      for (let i = this.remoteBullets.length - 1; i >= 0; i--) {
+        const b = this.remoteBullets[i];
+        b.x += b.dx;
+        b.y += b.dy;
+        b.life += 1;
+        
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(Math.atan2(b.dy, b.dx));
+        ctx.fillStyle = b.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = b.color;
+        ctx.fillRect(-10, -2, 20, 4);
+        ctx.restore();
+        
+        if (b.life > 100) this.remoteBullets.splice(i, 1);
+      }
+    },
+
     updateLobbyUI(players, isHostView) {
-      const pList = document.getElementById('mp-players-list');
+      const pList = document.getElementById('mp-player-list');
       if (!pList) return;
       pList.innerHTML = '';
       players.forEach(p => {
