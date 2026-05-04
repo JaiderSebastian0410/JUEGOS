@@ -2662,7 +2662,7 @@
         }
         
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.host;
+        const host = window.location.host || 'localhost:3000';
         this.ws = new WebSocket(`${protocol}//${host}/ws`);
 
         this.ws.onopen = () => {
