@@ -92,6 +92,7 @@ class Room {
 const wss = new WebSocket.Server({ noServer: true });
 
 wss.on('connection', (ws) => {
+  console.log('[WS] New WebSocket connection established');
   ws.on('message', (message) => {
     try {
       const msg = JSON.parse(message.toString());
@@ -353,11 +354,13 @@ function handleDisconnect(ws) {
 }
 
 server.on('upgrade', (req, socket, head) => {
+  console.log(`[UPGRADE] Request for: ${req.url}`);
   if (req.url === '/ws') {
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
     });
   } else {
+    console.log(`[UPGRADE] Rejected (invalid URL): ${req.url}`);
     socket.destroy();
   }
 });
@@ -376,7 +379,7 @@ setInterval(() => {
 
 // ---- Start Server ----
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Space Defender Pro — Multiplayer Server`);
   console.log(`   HTTP:      http://localhost:${PORT}`);
   console.log(`   WebSocket: ws://localhost:${PORT}/ws`);
