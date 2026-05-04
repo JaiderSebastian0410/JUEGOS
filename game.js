@@ -2642,10 +2642,8 @@
      MULTIPLAYER MODULE
      ========================================================= */
   const MP = {
-    peer: null,
+    ws: null,
     isHost: false,
-    hostConn: null, // For clients
-    clientConns: new Map(), // For host: peerId -> conn
     connected: false,
     roomId: null,
     playerId: null,
@@ -2657,18 +2655,51 @@
     lastStateSend: 0,
     STATE_INTERVAL: 50,       
 
-    generateId() {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let id = '';
-      for(let i=0; i<6; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
-      return id;
+    connect() {
+      return new Promise((resolve, reject) => {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          resolve(); return;
+        }
+        
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        this.ws = new WebSocket(`${protocol}//${host}/ws`);
+
+        this.ws.onopen = () => {
+          this.connected = true;
+          console.log('[MP] Connected to server');
+          resolve();
+        };
+
+        this.ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            this.onMessage(msg);
+          } catch (e) {
+            console.error('[MP] Error parsing message', e);
+          }
+        };
+
+        this.ws.onclose = () => {
+          this.connected = false;
+          this.isMultiplayer = false;
+          console.log('[MP] Disconnected from server');
+          if (gameState === 'PLAYING') {
+            this.showError('Conexión perdida con el servidor.');
+            setTimeout(() => location.reload(), 3000);
+          }
+        };
+
+        this.ws.onerror = (err) => {
+          console.error('[MP] WebSocket error', err);
+          reject(err);
+        };
+      });
     },
 
     disconnect() {
-      if (this.peer) { this.peer.destroy(); this.peer = null; }
+      if (this.ws) { this.ws.close(); this.ws = null; }
       this.isHost = false;
-      this.hostConn = null;
-      this.clientConns.clear();
       this.connected = false;
       this.isMultiplayer = false;
       this.roomId = null;
@@ -2680,26 +2711,8 @@
     },
 
     send(msg) {
-      if (this.isHost) {
-        // Host broadcasts to all connected clients
-        for (const conn of this.clientConns.values()) {
-          if (conn.open) conn.send(msg);
-        }
-      } else {
-        // Client sends to Host
-        if (this.hostConn && this.hostConn.open) {
-          this.hostConn.send(msg);
-        }
-      }
-    },
-
-    // Host relays a message to all clients EXCEPT the original sender
-    relay(msg, excludeId) {
-      if (!this.isHost) return;
-      for (const [id, conn] of this.clientConns) {
-        if (id !== excludeId && conn.open) {
-          conn.send(msg);
-        }
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify(msg));
       }
     },
 
@@ -2707,162 +2720,54 @@
       return Array.from(this.players.values());
     },
 
-    createRoom() {
-      if (typeof Peer === 'undefined') { MP.showError('PeerJS no cargado. Revisa conexión.'); return; }
+    async createRoom() {
       const nameEl = $('mp-player-name');
       const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
       
-      this.disconnect();
-      this.roomId = this.generateId();
-      this.isHost = true;
-      this.playerId = 'host-' + this.roomId;
-      this.hostId = this.playerId;
-      
-      this.players.set(this.playerId, { id: this.playerId, name: name, isHost: true });
-
-      // Initialize PeerJS for Host - Explicitly use public cloud
       try {
-        this.peer = new Peer('sdpro-' + this.roomId, {
-          host: '0.peerjs.com',
-          port: 443,
-          secure: true,
-          debug: 3
-        });
+        await this.connect();
+        this.send({ type: 'create_room', name: name });
       } catch (e) {
-        MP.showError('Error al iniciar PeerJS: ' + e.message); return;
+        this.showError('No se pudo conectar al servidor.');
       }
-      
-      this.peer.on('open', (id) => {
-        this.connected = true;
-        this.onMessage({
-          type: 'room_created',
-          roomId: this.roomId,
-          playerId: this.playerId,
-          players: this.getPlayerList()
-        });
-      });
-
-      this.peer.on('connection', (conn) => {
-        conn.on('data', (msg) => {
-          if (msg.type === 'join') {
-            const newPlayerId = conn.peer;
-            this.clientConns.set(newPlayerId, conn);
-            this.players.set(newPlayerId, { id: newPlayerId, name: msg.name, isHost: false });
-            
-            // Send join confirmation to new client
-            conn.send({
-              type: 'room_joined',
-              roomId: this.roomId,
-              playerId: newPlayerId,
-              hostId: this.hostId,
-              players: this.getPlayerList(),
-              difficulty: $('mp-difficulty') ? $('mp-difficulty').value : 'medio'
-            });
-
-            // Inform others and update local UI
-            const joinedMsg = { type: 'player_joined', newPlayer: { id: newPlayerId, name: msg.name }, players: this.getPlayerList() };
-            this.relay(joinedMsg, newPlayerId);
-            this.onMessage(joinedMsg);
-
-          } else {
-            // Relay in-game message from client
-            msg.id = conn.peer; // ensure ID is correct
-            this.relay(msg, conn.peer);
-            this.onMessage(msg);
-          }
-        });
-
-        conn.on('close', () => {
-          if (this.players.has(conn.peer)) {
-            const p = this.players.get(conn.peer);
-            this.players.delete(conn.peer);
-            this.clientConns.delete(conn.peer);
-            const leftMsg = { type: 'player_left', id: conn.peer, name: p.name, players: this.getPlayerList() };
-            this.relay(leftMsg, conn.peer);
-            this.onMessage(leftMsg);
-          }
-        });
-      });
-
-      this.peer.on('error', (err) => {
-        console.error('[PeerJS Host Error]', err);
-        MP.showError('Error al crear sala o ID en uso.');
-        this.disconnect();
-      });
     },
 
-    joinRoom() {
-      if (typeof Peer === 'undefined') { MP.showError('PeerJS no cargado. Revisa conexión.'); return; }
+    async joinRoom() {
       const nameEl = $('mp-player-name');
       const codeEl = $('mp-room-code-input');
       const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
       const code = (codeEl ? codeEl.value.trim().toUpperCase() : '');
       
-      if (!code || code.length < 4) { MP.showError('Ingresa un código de sala válido.'); return; }
-      
-      this.disconnect();
-      this.roomId = code;
-      this.isHost = false;
+      if (!code || code.length < 4) { this.showError('Ingresa un código de sala válido.'); return; }
       
       try {
-        this.peer = new Peer({
-          host: '0.peerjs.com',
-          port: 443,
-          secure: true,
-          debug: 2
-        }); // random client ID
+        await this.connect();
+        this.send({ type: 'join_room', roomId: code, name: name });
       } catch (e) {
-        MP.showError('Error al iniciar PeerJS.'); return;
+        this.showError('No se pudo conectar al servidor.');
       }
+    },
 
-      this.peer.on('open', (id) => {
-        this.playerId = id;
-        this.hostId = 'host-' + code;
-        
-        this.hostConn = this.peer.connect('sdpro-' + code);
-
-        this.hostConn.on('open', () => {
-          this.connected = true;
-          this.hostConn.send({ type: 'join', name: name });
-        });
-
-        this.hostConn.on('data', (msg) => {
-          this.onMessage(msg);
-        });
-
-        this.hostConn.on('close', () => {
-          this.onMessage({ type: 'error', message: 'El anfitrión ha cerrado la sala.' });
-          this.disconnect();
-        });
-        
-        this.hostConn.on('error', (err) => {
-          MP.showError('Error en conexión con la sala.');
-          this.disconnect();
-        });
-      });
-
-      this.peer.on('error', (err) => {
-        console.error('[PeerJS Client Error]', err);
-        MP.showError('Sala no encontrada o error de red.');
-        this.disconnect();
+    copyRoomId() {
+      if (!this.roomId) return;
+      navigator.clipboard.writeText(this.roomId).then(() => {
+        const btn = document.querySelector('[onclick="mpCopyRoomId()"]');
+        if (btn) {
+          const oldText = btn.innerText;
+          btn.innerText = '✅ Copiado';
+          setTimeout(() => btn.innerText = oldText, 2000);
+        }
       });
     },
 
     setDifficulty(diff) {
       if (!this.isHost) return;
-      const msg = { type: 'difficulty_changed', difficulty: diff };
-      this.send(msg);
+      this.send({ type: 'set_difficulty', difficulty: diff });
     },
 
     requestStartGame() {
       if (!this.isHost) return;
-      const msg = {
-        type: 'game_start',
-        difficulty: $('mp-difficulty') ? $('mp-difficulty').value : 'medio',
-        players: this.getPlayerList()
-      };
-      this.send(msg);
-      this.onMessage(msg); // host processes its own start
+      this.send({ type: 'start_game' });
     },
 
     sendState() {
@@ -2871,7 +2776,6 @@
       this.lastStateSend = now;
       this.send({
         type: 'player_state',
-        id: this.playerId,
         x: player.x, y: player.y,
         angle: player.angle,
         skin: player.skin.type,
@@ -2885,12 +2789,12 @@
     },
 
     sendShoot(bx, by, bdx, bdy, color, source) {
-      this.send({ type: 'player_shoot', id: this.playerId, x: bx, y: by, dx: bdx, dy: bdy, color, source });
+      this.send({ type: 'player_shoot', x: bx, y: by, dx: bdx, dy: bdy, color, source });
     },
 
     sendDeath() {
       const nameEl = $('mp-player-name');
-      this.send({ type: 'player_died', id: this.playerId, name: nameEl ? nameEl.value.trim() : 'Piloto' });
+      this.send({ type: 'player_died', name: nameEl ? nameEl.value.trim() : 'Piloto' });
     },
 
     sendGameOver() {
@@ -2908,8 +2812,9 @@
           this.roomId = msg.roomId;
           this.playerId = msg.playerId;
           this.hostId = msg.playerId;
-          this.updateLobbyUI(msg.players, true);
-          // Switch to lobby view
+          this.isHost = true;
+          this.updateLobbyUI(msg.players);
+          
           if ($('mp-create-join')) $('mp-create-join').style.display = 'none';
           if ($('mp-lobby')) $('mp-lobby').style.display = 'flex';
           if ($('mp-room-id-display')) $('mp-room-id-display').innerText = msg.roomId;
@@ -2921,24 +2826,27 @@
           this.roomId = msg.roomId;
           this.playerId = msg.playerId;
           this.hostId = msg.hostId;
-          this.updateLobbyUI(msg.players, msg.playerId === msg.hostId);
+          this.isHost = (msg.playerId === msg.hostId);
+          this.updateLobbyUI(msg.players);
+          
           if ($('mp-create-join')) $('mp-create-join').style.display = 'none';
           if ($('mp-lobby')) $('mp-lobby').style.display = 'flex';
           if ($('mp-room-id-display')) $('mp-room-id-display').innerText = msg.roomId;
-          // Only host can start/configure
-          if ($('mp-start-btn')) $('mp-start-btn').style.display = msg.playerId === msg.hostId ? 'inline-block' : 'none';
-          if ($('mp-diff-select')) $('mp-diff-select').style.display = msg.playerId === msg.hostId ? 'block' : 'none';
+          
+          if ($('mp-start-btn')) $('mp-start-btn').style.display = this.isHost ? 'inline-block' : 'none';
+          if ($('mp-diff-select')) $('mp-diff-select').style.display = this.isHost ? 'block' : 'none';
+          if ($('mp-waiting-msg')) $('mp-waiting-msg').style.display = this.isHost ? 'none' : 'block';
           if (msg.difficulty && $('mp-difficulty')) $('mp-difficulty').value = msg.difficulty;
           break;
 
         case 'player_joined':
-          this.updateLobbyUI(msg.players, this.playerId === this.hostId);
+          this.updateLobbyUI(msg.players);
           showAnnouncement('🛸 ' + msg.newPlayer.name + ' se unió');
           break;
 
         case 'player_left':
           this.remotePlayers.delete(msg.id);
-          this.updateLobbyUI(msg.players, this.playerId === this.hostId);
+          this.updateLobbyUI(msg.players);
           showAnnouncement('🚀 ' + msg.name + ' salió');
           break;
 
@@ -2948,27 +2856,24 @@
 
         case 'game_start':
           this.isMultiplayer = true;
-          // Initialize remote player entries
+          this.remotePlayers.clear();
           for (const p of msg.players) {
             if (p.id !== this.playerId) {
               this.remotePlayers.set(p.id, {
-                x: WORLD.WIDTH/2 + (Math.random()-0.5)*200,
-                y: WORLD.HEIGHT/2 + (Math.random()-0.5)*200,
+                x: WORLD.WIDTH/2, y: WORLD.HEIGHT/2,
                 angle: 0, skin: 'classic', powers: {}, shield: 0, vida: 5,
                 name: p.name, lastUpdate: Date.now(),
-                // Interpolation targets
                 tx: WORLD.WIDTH/2, ty: WORLD.HEIGHT/2, tangle: 0,
               });
             }
           }
-          // Hide lobby, start game
           $('multiplayer-menu').classList.remove('active');
           window.setupDifficulty(msg.difficulty);
           startCountdown(3);
           break;
 
         case 'player_state': {
-          if (msg.id === this.playerId) break; // Don't process our own echoed state
+          if (msg.id === this.playerId) break;
           let rp = this.remotePlayers.get(msg.id);
           if (!rp) {
             rp = { x: msg.x, y: msg.y, angle: msg.angle, skin: msg.skin || 'classic',
@@ -2976,7 +2881,6 @@
                    name: '', lastUpdate: Date.now(), tx: msg.x, ty: msg.y, tangle: msg.angle };
             this.remotePlayers.set(msg.id, rp);
           }
-          // Set interpolation targets
           rp.tx = msg.x; rp.ty = msg.y; rp.tangle = msg.angle;
           rp.skin = msg.skin || rp.skin;
           rp.powers = msg.powers || rp.powers;
@@ -2988,7 +2892,6 @@
 
         case 'player_shoot': {
           if (msg.id === this.playerId) break;
-          // Add visual-only bullet
           if (this.remoteBullets.length < 100) {
             this.remoteBullets.push({
               x: msg.x, y: msg.y, dx: msg.dx, dy: msg.dy,
@@ -3003,16 +2906,31 @@
           showAnnouncement('💀 ' + (msg.name || 'Aliado') + ' fue destruido');
           break;
 
-        case 'pong':
+        case 'host_changed':
+          this.hostId = msg.hostId;
+          this.isHost = (this.playerId === msg.hostId);
+          this.updateLobbyUI(msg.players);
+          if (this.isHost) {
+            if ($('mp-start-btn')) $('mp-start-btn').style.display = 'inline-block';
+            if ($('mp-diff-select')) $('mp-diff-select').style.display = 'block';
+            if ($('mp-waiting-msg')) $('mp-waiting-msg').style.display = 'none';
+            showAnnouncement('👑 Ahora eres el anfitrión');
+          }
+          break;
+
+        case 'error':
+          this.showError(msg.message);
           break;
       }
     },
 
-    updateLobbyUI(players, isHost) {
+    updateLobbyUI(players) {
       const list = $('mp-player-list');
       if (!list) return;
       list.innerHTML = '';
+      this.players.clear();
       for (const p of players) {
+        this.players.set(p.id, p);
         const li = document.createElement('div');
         li.style.cssText = 'padding:8px 12px;background:rgba(0,255,255,0.05);border:1px solid rgba(0,255,255,0.15);border-radius:8px;display:flex;justify-content:space-between;align-items:center;';
         li.innerHTML = `<span style="color:#fff;">${p.name}</span>` +
@@ -3021,32 +2939,23 @@
       }
     },
 
-    // Interpolate and draw remote players each frame
     updateAndDrawRemote() {
       if (!this.isMultiplayer) return;
-
       const now = Date.now();
       const lerpFactor = 0.15;
 
       for (const [id, rp] of this.remotePlayers) {
-        // Drop stale players (no update in 10s)
         if (now - rp.lastUpdate > 10000) { this.remotePlayers.delete(id); continue; }
-
-        // Interpolate position
         rp.x += (rp.tx - rp.x) * lerpFactor;
         rp.y += (rp.ty - rp.y) * lerpFactor;
-
-        // Interpolate angle
         let aDiff = rp.tangle - rp.angle;
         aDiff = ((aDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
         if (aDiff < -Math.PI) aDiff += Math.PI * 2;
         rp.angle += aDiff * lerpFactor;
 
-        // Don't draw if off-screen
         if (rp.x < camera.x - 100 || rp.x > camera.x + camera.width + 100 ||
             rp.y < camera.y - 100 || rp.y > camera.y + camera.height + 100) continue;
 
-        // Build a temporary player-like object for drawPlayer
         const fakeP = {
           x: rp.x, y: rp.y, angle: rp.angle, size: 24,
           skin: { type: rp.skin || 'classic', img: SKINS[rp.skin] || SKINS.classic },
@@ -3059,20 +2968,17 @@
           debuffs: { slow: 0, disable: 0, noscore: 0, powerlock: 0 },
         };
 
-        // Draw with a slight alpha tint to distinguish ally
         ctx.save();
         ctx.globalAlpha = 0.85;
         drawPlayer(ctx, fakeP);
         ctx.restore();
 
-        // Draw ally name tag
         ctx.save();
         ctx.font = 'bold 11px Orbitron';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#2ecc71';
         ctx.globalAlpha = 0.8;
         ctx.fillText(rp.name || 'Aliado', rp.x, rp.y - 38);
-        // Health indicator
         if (rp.vida !== undefined && rp.vida < 99) {
           ctx.fillStyle = 'rgba(255,255,255,0.2)';
           ctx.fillRect(rp.x - 20, rp.y - 30, 40, 4);
@@ -3082,7 +2988,6 @@
         ctx.restore();
       }
 
-      // Draw remote bullets (visual only)
       for (let i = this.remoteBullets.length - 1; i >= 0; i--) {
         const b = this.remoteBullets[i];
         b.x += b.dx; b.y += b.dy;
@@ -3186,7 +3091,7 @@
   window.mpCreateRoom = () => MP.createRoom();
   window.mpJoinRoom = () => MP.joinRoom();
   window.mpSetDifficulty = (el) => MP.setDifficulty(el.value);
-  window.mpStartGame = () => MP.startGame();
+  window.mpStartGame = () => MP.requestStartGame();
   window.mpCopyRoomId = () => MP.copyRoomId();
   window.MP = MP;
 

@@ -88,7 +88,7 @@ class Room {
 }
 
 // ---- Raw WebSocket Implementation ----
-function acceptWebSocket(req, socket) {
+function acceptWebSocket(req, socket, head) {
   const key = req.headers['sec-websocket-key'];
   if (!key) { socket.destroy(); return; }
 
@@ -97,13 +97,16 @@ function acceptWebSocket(req, socket) {
     .update(key + '258EAFA5-E914-47DA-95CA-5AB9FC6B06AE')
     .digest('base64');
 
-  socket.write(
-    'HTTP/1.1 101 Switching Protocols\r\n' +
-    'Upgrade: websocket\r\n' +
-    'Connection: Upgrade\r\n' +
-    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
-    '\r\n'
-  );
+  const handshake = [
+    'HTTP/1.1 101 Switching Protocols',
+    'Upgrade: websocket',
+    'Connection: Upgrade',
+    'Sec-WebSocket-Accept: ' + acceptKey,
+    '',
+    ''
+  ].join('\r\n');
+
+  socket.write(handshake);
 
   const ws = {
     socket,
@@ -111,7 +114,7 @@ function acceptWebSocket(req, socket) {
     _buffer: Buffer.alloc(0),
   };
 
-  socket.on('data', (data) => {
+  function handleData(data) {
     ws._buffer = Buffer.concat([ws._buffer, data]);
     while (ws._buffer.length >= 2) {
       const frame = parseFrame(ws._buffer);
@@ -119,26 +122,26 @@ function acceptWebSocket(req, socket) {
       ws._buffer = ws._buffer.slice(frame.totalLength);
 
       if (frame.opcode === 0x8) {
-        // Close
         ws.readyState = 3;
         socket.end();
         handleDisconnect(ws);
         return;
       }
       if (frame.opcode === 0x9) {
-        // Ping -> Pong
         sendFrame(socket, frame.payload, 0xA);
         continue;
       }
       if (frame.opcode === 0x1) {
-        // Text
         try {
           const msg = JSON.parse(frame.payload.toString('utf8'));
           handleMessage(ws, msg);
-        } catch (e) { /* ignore malformed */ }
+        } catch (e) { /* ignore */ }
       }
     }
-  });
+  }
+
+  if (head && head.length > 0) handleData(head);
+  socket.on('data', handleData);
 
   socket.on('close', () => {
     ws.readyState = 3;
@@ -294,8 +297,8 @@ function handleMessage(ws, msg) {
       if (!info) return;
       const room = rooms.get(info.roomId);
       if (!room || info.playerId !== room.hostId) return;
-      if (room.players.size < 2) {
-        wsSend(ws, JSON.stringify({ type: 'error', message: 'Se necesitan al menos 2 jugadores.' }));
+      if (room.players.size < 1) {
+        wsSend(ws, JSON.stringify({ type: 'error', message: 'No hay jugadores en la sala.' }));
         return;
       }
       room.gameStarted = true;
@@ -452,10 +455,9 @@ function handleDisconnect(ws) {
   console.log(`[ROOM] ${playerName} left ${info.roomId}`);
 }
 
-// ---- Upgrade HTTP to WebSocket ----
 server.on('upgrade', (req, socket, head) => {
   if (req.url === '/ws') {
-    acceptWebSocket(req, socket);
+    acceptWebSocket(req, socket, head);
   } else {
     socket.destroy();
   }
@@ -475,7 +477,7 @@ setInterval(() => {
 
 // ---- Start Server ----
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, () => {
   console.log(`\n🚀 Space Defender Pro — Multiplayer Server`);
   console.log(`   HTTP:      http://localhost:${PORT}`);
   console.log(`   WebSocket: ws://localhost:${PORT}/ws`);
