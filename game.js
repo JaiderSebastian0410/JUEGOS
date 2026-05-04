@@ -2644,14 +2644,15 @@
      ========================================================= */
   const MP = {
     peer: null,
+    clientMQTT: null,
+    activeProtocol: null, // 'mqtt' | 'peerjs'
+    clientConns: new Map(), // For Host: id -> conn (PeerJS) or 'mqtt'
     isHost: false,
-    hostConn: null, // For clients
-    clientConns: new Map(), // For host: peerId -> conn
     connected: false,
     roomId: null,
     playerId: null,
     hostId: null,
-    players: new Map(), // id -> { id, name, isHost }
+    players: new Map(),
     isMultiplayer: false,
     remotePlayers: new Map(), 
     remoteBullets: [],        
@@ -2667,6 +2668,8 @@
 
     disconnect() {
       if (this.peer) { this.peer.destroy(); this.peer = null; }
+      if (this.clientMQTT) { this.clientMQTT.end(); this.clientMQTT = null; }
+      this.activeProtocol = null;
       this.isHost = false;
       this.hostConn = null;
       this.clientConns.clear();
@@ -2681,26 +2684,39 @@
     },
 
     send(msg) {
+      if (!this.connected) return;
+      msg._sender = this.playerId; 
+      
       if (this.isHost) {
-        // Host broadcasts to all connected clients
+        let sendMQTT = false;
         for (const conn of this.clientConns.values()) {
-          if (conn.open) conn.send(msg);
+          if (conn === 'mqtt') sendMQTT = true;
+          else if (conn && conn.open) conn.send(msg); // PeerJS
+        }
+        if (sendMQTT && this.clientMQTT) {
+           this.clientMQTT.publish(`sdpro/${this.roomId}/clients`, JSON.stringify(msg));
         }
       } else {
-        // Client sends to Host
-        if (this.hostConn && this.hostConn.open) {
-          this.hostConn.send(msg);
+        if (this.activeProtocol === 'mqtt' && this.clientMQTT) {
+           this.clientMQTT.publish(`sdpro/${this.roomId}/host`, JSON.stringify(msg));
+        } else if (this.activeProtocol === 'peerjs' && this.hostConn && this.hostConn.open) {
+           this.hostConn.send(msg);
         }
       }
     },
 
-    // Host relays a message to all clients EXCEPT the original sender
     relay(msg, excludeId) {
-      if (!this.isHost) return;
-      for (const [id, conn] of this.clientConns) {
-        if (id !== excludeId && conn.open) {
-          conn.send(msg);
+      if (!this.isHost || !this.connected) return;
+      let sendMQTT = false;
+      for (const [id, conn] of this.clientConns.entries()) {
+        if (id !== excludeId) {
+          if (conn === 'mqtt') sendMQTT = true;
+          else if (conn && conn.open) conn.send(msg);
         }
+      }
+      if (sendMQTT && this.clientMQTT) {
+         msg._exclude = excludeId; 
+         this.clientMQTT.publish(`sdpro/${this.roomId}/clients`, JSON.stringify(msg));
       }
     },
 
@@ -2709,8 +2725,7 @@
     },
 
     createRoom() {
-      if (typeof Peer === 'undefined') { MP.showError('PeerJS no cargado. Revisa conexión.'); return; }
-      const nameEl = $('mp-player-name');
+      const nameEl = document.getElementById('mp-player-name');
       const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
       
       this.disconnect();
@@ -2721,174 +2736,167 @@
       
       this.players.set(this.playerId, { id: this.playerId, name: name, isHost: true });
 
-      // Initialize PeerJS for Host - Explicitly use public cloud
-      try {
-        this.peer = new Peer('sdpro-' + this.roomId, {
-          host: '0.peerjs.com',
-          port: 443,
-          secure: true,
-          debug: 2,
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' },
-              { 
-                urls: "turn:openrelay.metered.ca:80",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-              },
-              { 
-                urls: "turn:openrelay.metered.ca:443",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-              },
-              { 
-                urls: "turn:openrelay.metered.ca:443?transport=tcp",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-              }
-            ]
-          }
-        });
-      } catch (e) {
-        MP.showError('Error al iniciar PeerJS: ' + e.message); return;
+      if (typeof mqtt !== 'undefined') {
+        try {
+          this.clientMQTT = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+          this.clientMQTT.on('connect', () => {
+            if (!this.connected) {
+               this.connected = true;
+               this.onMessage({ type: 'room_created', roomId: this.roomId, playerId: this.playerId, players: this.getPlayerList() });
+            }
+            this.clientMQTT.subscribe(`sdpro/${this.roomId}/host`);
+          });
+          this.clientMQTT.on('message', (topic, payload) => this.handleIncomingMessage(payload.toString(), 'mqtt'));
+        } catch(e) {}
+      }
+
+      if (typeof Peer !== 'undefined') {
+        try {
+          this.peer = new Peer('sdpro-' + this.roomId, {
+            host: '0.peerjs.com', port: 443, secure: true, debug: 1,
+            config: { iceServers: [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:"turn:openrelay.metered.ca:80",username:"openrelayproject",credential:"openrelayproject"},{urls:"turn:openrelay.metered.ca:443?transport=tcp",username:"openrelayproject",credential:"openrelayproject"}] }
+          });
+          this.peer.on('open', () => {
+            if (!this.connected) {
+               this.connected = true;
+               this.onMessage({ type: 'room_created', roomId: this.roomId, playerId: this.playerId, players: this.getPlayerList() });
+            }
+          });
+          this.peer.on('connection', (conn) => {
+            conn.on('data', (msg) => this.handleIncomingMessage(msg, conn));
+            conn.on('close', () => this.handleClientDisconnect(conn.peer));
+          });
+        } catch(e) {}
       }
       
-      this.peer.on('open', (id) => {
-        this.connected = true;
-        this.onMessage({
-          type: 'room_created',
-          roomId: this.roomId,
-          playerId: this.playerId,
-          players: this.getPlayerList()
-        });
-      });
-
-      this.peer.on('connection', (conn) => {
-        conn.on('data', (msg) => {
-          if (msg.type === 'join') {
-            const newPlayerId = conn.peer;
-            this.clientConns.set(newPlayerId, conn);
-            this.players.set(newPlayerId, { id: newPlayerId, name: msg.name, isHost: false });
-            
-            // Send join confirmation to new client
-            conn.send({
-              type: 'room_joined',
-              roomId: this.roomId,
-              playerId: newPlayerId,
-              hostId: this.hostId,
-              players: this.getPlayerList(),
-              difficulty: $('mp-difficulty') ? $('mp-difficulty').value : 'medio'
-            });
-
-            // Inform others and update local UI
-            const joinedMsg = { type: 'player_joined', newPlayer: { id: newPlayerId, name: msg.name }, players: this.getPlayerList() };
-            this.relay(joinedMsg, newPlayerId);
-            this.onMessage(joinedMsg);
-
-          } else {
-            // Relay in-game message from client
-            msg.id = conn.peer; // ensure ID is correct
-            this.relay(msg, conn.peer);
-            this.onMessage(msg);
-          }
-        });
-
-        conn.on('close', () => {
-          if (this.players.has(conn.peer)) {
-            const p = this.players.get(conn.peer);
-            this.players.delete(conn.peer);
-            this.clientConns.delete(conn.peer);
-            const leftMsg = { type: 'player_left', id: conn.peer, name: p.name, players: this.getPlayerList() };
-            this.relay(leftMsg, conn.peer);
-            this.onMessage(leftMsg);
-          }
-        });
-      });
-
-      this.peer.on('error', (err) => {
-        console.error('[PeerJS Host Error]', err);
-        MP.showError('Error al crear sala o ID en uso.');
-        this.disconnect();
-      });
+      setTimeout(() => {
+         if (!this.connected) { this.showError('No se pudo conectar a los servidores.'); this.disconnect(); }
+      }, 5000);
     },
 
     joinRoom() {
-      if (typeof Peer === 'undefined') { MP.showError('PeerJS no cargado. Revisa conexión.'); return; }
-      const nameEl = $('mp-player-name');
-      const codeEl = $('mp-room-code-input');
+      const nameEl = document.getElementById('mp-player-name');
+      const codeEl = document.getElementById('mp-room-code-input');
       const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
       const code = (codeEl ? codeEl.value.trim().toUpperCase() : '');
       
-      if (!code || code.length < 4) { MP.showError('Ingresa un código de sala válido.'); return; }
+      if (!code || code.length < 4) { this.showError('Código inválido.'); return; }
       
       this.disconnect();
       this.roomId = code;
       this.isHost = false;
-      
-      try {
-        this.peer = new Peer({
-          host: '0.peerjs.com',
-          port: 443,
-          secure: true,
-          debug: 2,
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' },
-              { 
-                urls: "turn:openrelay.metered.ca:80",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-              },
-              { 
-                urls: "turn:openrelay.metered.ca:443",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-              },
-              { 
-                urls: "turn:openrelay.metered.ca:443?transport=tcp",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-              }
-            ]
-          }
-        }); // random client ID
-      } catch (e) {
-        MP.showError('Error al iniciar PeerJS.'); return;
+      this.playerId = 'client-' + this.generateId();
+
+      if (typeof mqtt !== 'undefined') {
+        try {
+          this.clientMQTT = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+             will: { topic: `sdpro/${this.roomId}/host`, payload: JSON.stringify({type:'player_left_abrupt',_sender:this.playerId}), qos:0, retain:false }
+          });
+          this.clientMQTT.on('connect', () => {
+            this.clientMQTT.subscribe(`sdpro/${this.roomId}/clients`);
+            this.clientMQTT.publish(`sdpro/${this.roomId}/host`, JSON.stringify({ type: 'join', name: name, _sender: this.playerId }));
+          });
+          this.clientMQTT.on('message', (t, p) => this.handleIncomingMessage(p.toString(), 'mqtt'));
+        } catch(e) {}
       }
 
-      this.peer.on('open', (id) => {
-        this.playerId = id;
-        this.hostId = 'host-' + code;
-        
-        this.hostConn = this.peer.connect('sdpro-' + code);
+      if (typeof Peer !== 'undefined') {
+        try {
+          this.peer = new Peer({
+            host: '0.peerjs.com', port: 443, secure: true, debug: 1,
+            config: { iceServers: [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:"turn:openrelay.metered.ca:80",username:"openrelayproject",credential:"openrelayproject"},{urls:"turn:openrelay.metered.ca:443?transport=tcp",username:"openrelayproject",credential:"openrelayproject"}] }
+          });
+          this.peer.on('open', () => {
+            this.hostConn = this.peer.connect('sdpro-' + code);
+            this.hostConn.on('open', () => {
+               this.hostConn.send({ type: 'join', name: name, _sender: this.playerId });
+            });
+            this.hostConn.on('data', (msg) => this.handleIncomingMessage(msg, 'peerjs'));
+            this.hostConn.on('close', () => {
+               if (this.activeProtocol === 'peerjs') {
+                  this.onMessage({ type: 'error', message: 'El anfitrión ha cerrado la sala.' });
+                  this.disconnect();
+               }
+            });
+          });
+        } catch(e) {}
+      }
 
-        this.hostConn.on('open', () => {
-          this.connected = true;
-          this.hostConn.send({ type: 'join', name: name });
-        });
-
-        this.hostConn.on('data', (msg) => {
-          this.onMessage(msg);
-        });
-
-        this.hostConn.on('close', () => {
-          this.onMessage({ type: 'error', message: 'El anfitrión ha cerrado la sala.' });
+      setTimeout(() => {
+        if (!this.activeProtocol) {
+          this.showError('Sala no encontrada o anfitrión desconectado.');
           this.disconnect();
-        });
-        
-        this.hostConn.on('error', (err) => {
-          MP.showError('Error en conexión con la sala.');
-          this.disconnect();
-        });
-      });
+        }
+      }, 7000);
+    },
 
-      this.peer.on('error', (err) => {
-        console.error('[PeerJS Client Error]', err);
-        MP.showError('Sala no encontrada o error de red.');
-        this.disconnect();
-      });
+    handleIncomingMessage(rawMsg, source) {
+      let msg = rawMsg;
+      if (typeof rawMsg === 'string') {
+        try { msg = JSON.parse(rawMsg); } catch(e) { return; }
+      }
+
+      if (this.isHost) {
+        const sender = msg._sender || msg.id;
+        if (msg.type === 'join') {
+           if (!this.players.has(sender)) {
+             this.clientConns.set(sender, source); // source is 'mqtt' or conn object
+             this.players.set(sender, { id: sender, name: msg.name, isHost: false });
+             
+             const diffEl = document.getElementById('mp-difficulty');
+             const joinedConfirm = {
+               type: 'room_joined', roomId: this.roomId, hostId: this.hostId,
+               players: this.getPlayerList(), difficulty: diffEl ? diffEl.value : 'medio',
+               targetId: sender, protocol: source === 'mqtt' ? 'mqtt' : 'peerjs'
+             };
+             
+             if (source === 'mqtt' && this.clientMQTT) {
+               this.clientMQTT.publish(`sdpro/${this.roomId}/clients`, JSON.stringify(joinedConfirm));
+             } else if (source.open) {
+               source.send(joinedConfirm);
+             }
+
+             const notifyMsg = { type: 'player_joined', newPlayer: { id: sender, name: msg.name }, players: this.getPlayerList() };
+             this.relay(notifyMsg, sender);
+             this.onMessage(notifyMsg);
+           }
+        } else if (msg.type === 'player_left_abrupt') {
+           this.handleClientDisconnect(sender);
+        } else {
+           if (msg.type === 'player_quit_game') {
+              if (this.remotePlayers.has(sender)) this.remotePlayers.get(sender).vida = 0;
+           } else {
+              this.relay(msg, sender);
+              this.onMessage(msg);
+           }
+        }
+      } else {
+        if (msg._exclude === this.playerId) return; 
+        if (msg.type === 'room_joined' && msg.targetId === this.playerId) {
+           if (!this.activeProtocol) {
+              this.activeProtocol = msg.protocol;
+              this.connected = true;
+              msg.playerId = this.playerId; 
+              this.onMessage(msg);
+              
+              if (this.activeProtocol === 'mqtt' && this.peer) { this.peer.destroy(); this.peer = null; }
+              if (this.activeProtocol === 'peerjs' && this.clientMQTT) { this.clientMQTT.end(); this.clientMQTT = null; }
+           }
+        } else if (this.activeProtocol) {
+           this.onMessage(msg);
+        }
+      }
+    },
+
+    handleClientDisconnect(id) {
+       if (this.players.has(id)) {
+         const p = this.players.get(id);
+         this.players.delete(id);
+         this.clientConns.delete(id);
+         const leftMsg = { type: 'player_left', id: id, name: p.name, players: this.getPlayerList() };
+         this.relay(leftMsg, id);
+         this.onMessage(leftMsg);
+       }
     },
 
     setDifficulty(diff) {
@@ -2899,9 +2907,10 @@
 
     requestStartGame() {
       if (!this.isHost) return;
+      const diffEl = document.getElementById('mp-difficulty');
       const msg = {
         type: 'game_start',
-        difficulty: $('mp-difficulty') ? $('mp-difficulty').value : 'medio',
+        difficulty: diffEl ? diffEl.value : 'medio',
         players: this.getPlayerList()
       };
       this.send(msg);
@@ -2937,7 +2946,7 @@
           manual: player.powers.manual > 0 ? 1 : 0,
         },
         shield: player.powers.shield > 0 ? 1 : 0,
-        vida: isPractice ? 99 : player.vida,
+        vida: typeof isPractice !== 'undefined' && isPractice ? 99 : player.vida,
       });
     },
 
@@ -2946,17 +2955,34 @@
     },
 
     sendDeath() {
-      const nameEl = $('mp-player-name');
+      const nameEl = document.getElementById('mp-player-name');
       this.send({ type: 'player_died', id: this.playerId, name: nameEl ? nameEl.value.trim() : 'Piloto' });
     },
 
     sendGameOver() {
-      this.send({ type: 'game_over', score, kills, time });
+      this.send({ type: 'game_over', score: typeof score !== 'undefined' ? score : 0, kills: typeof kills !== 'undefined' ? kills : 0, time: typeof time !== 'undefined' ? time : 0 });
     },
 
     showError(msg) {
-      const el = $('mp-error');
+      const el = document.getElementById('mp-error');
       if (el) { el.innerText = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 4000); }
+    },
+
+    updateLobbyUI(players, isHostView) {
+      const pList = document.getElementById('mp-players-list');
+      if (!pList) return;
+      pList.innerHTML = '';
+      players.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'mp-player-item';
+        div.innerText = (p.isHost ? '👑 ' : '🚀 ') + p.name;
+        if (p.id === this.playerId) div.innerText += ' (Tú)';
+        pList.appendChild(div);
+      });
+      const stBtn = document.getElementById('mp-start-btn');
+      const diffSel = document.getElementById('mp-diff-select');
+      if (stBtn) stBtn.style.display = isHostView ? 'inline-block' : 'none';
+      if (diffSel) diffSel.style.display = isHostView ? 'block' : 'none';
     },
 
     onMessage(msg) {
@@ -2966,12 +2992,11 @@
           this.playerId = msg.playerId;
           this.hostId = msg.playerId;
           this.updateLobbyUI(msg.players, true);
-          // Switch to lobby view
-          if ($('mp-create-join')) $('mp-create-join').style.display = 'none';
-          if ($('mp-lobby')) $('mp-lobby').style.display = 'flex';
-          if ($('mp-room-id-display')) $('mp-room-id-display').innerText = msg.roomId;
-          if ($('mp-start-btn')) $('mp-start-btn').style.display = 'inline-block';
-          if ($('mp-diff-select')) $('mp-diff-select').style.display = 'block';
+          if (document.getElementById('mp-create-join')) document.getElementById('mp-create-join').style.display = 'none';
+          if (document.getElementById('mp-lobby')) document.getElementById('mp-lobby').style.display = 'flex';
+          if (document.getElementById('mp-room-id-display')) document.getElementById('mp-room-id-display').innerText = msg.roomId;
+          if (document.getElementById('mp-start-btn')) document.getElementById('mp-start-btn').style.display = 'inline-block';
+          if (document.getElementById('mp-diff-select')) document.getElementById('mp-diff-select').style.display = 'block';
           break;
 
         case 'room_joined':
@@ -2979,231 +3004,124 @@
           this.playerId = msg.playerId;
           this.hostId = msg.hostId;
           this.updateLobbyUI(msg.players, msg.playerId === msg.hostId);
-          if ($('mp-create-join')) $('mp-create-join').style.display = 'none';
-          if ($('mp-lobby')) $('mp-lobby').style.display = 'flex';
-          if ($('mp-room-id-display')) $('mp-room-id-display').innerText = msg.roomId;
-          // Only host can start/configure
-          if ($('mp-start-btn')) $('mp-start-btn').style.display = msg.playerId === msg.hostId ? 'inline-block' : 'none';
-          if ($('mp-diff-select')) $('mp-diff-select').style.display = msg.playerId === msg.hostId ? 'block' : 'none';
-          if (msg.difficulty && $('mp-difficulty')) $('mp-difficulty').value = msg.difficulty;
+          if (document.getElementById('mp-create-join')) document.getElementById('mp-create-join').style.display = 'none';
+          if (document.getElementById('mp-lobby')) document.getElementById('mp-lobby').style.display = 'flex';
+          if (document.getElementById('mp-room-id-display')) document.getElementById('mp-room-id-display').innerText = msg.roomId;
+          if (document.getElementById('mp-start-btn')) document.getElementById('mp-start-btn').style.display = msg.playerId === msg.hostId ? 'inline-block' : 'none';
+          if (document.getElementById('mp-diff-select')) document.getElementById('mp-diff-select').style.display = msg.playerId === msg.hostId ? 'block' : 'none';
+          if (msg.difficulty && document.getElementById('mp-difficulty')) document.getElementById('mp-difficulty').value = msg.difficulty;
           break;
 
         case 'player_joined':
           this.updateLobbyUI(msg.players, this.playerId === this.hostId);
-          showAnnouncement('🛸 ' + msg.newPlayer.name + ' se unió');
+          if(typeof showAnnouncement !== 'undefined') showAnnouncement('🛸 ' + msg.newPlayer.name + ' se unió');
           break;
 
         case 'player_left':
           this.remotePlayers.delete(msg.id);
           this.updateLobbyUI(msg.players, this.playerId === this.hostId);
-          showAnnouncement('🚀 ' + msg.name + ' salió');
+          if(typeof showAnnouncement !== 'undefined') showAnnouncement('🚀 ' + msg.name + ' salió');
           break;
 
         case 'difficulty_changed':
-          if ($('mp-difficulty')) $('mp-difficulty').value = msg.difficulty;
+          if (document.getElementById('mp-difficulty')) document.getElementById('mp-difficulty').value = msg.difficulty;
           break;
 
         case 'game_start':
           this.isMultiplayer = true;
-          // Initialize remote player entries
+          this.remotePlayers.clear();
           for (const p of msg.players) {
             if (p.id !== this.playerId) {
               this.remotePlayers.set(p.id, {
-                x: WORLD.WIDTH/2 + (Math.random()-0.5)*200,
-                y: WORLD.HEIGHT/2 + (Math.random()-0.5)*200,
-                angle: 0, skin: 'classic', powers: {}, shield: 0, vida: 5,
-                name: p.name, lastUpdate: Date.now(),
-                // Interpolation targets
-                tx: WORLD.WIDTH/2, ty: WORLD.HEIGHT/2, tangle: 0,
+                x: -1000, y: -1000, angle: 0,
+                targetX: -1000, targetY: -1000, targetAngle: 0,
+                skin: 'classic',
+                vida: 100, powers: { auto: 0, manual: 0 }, shield: 0,
+                lastUpdate: performance.now(),
+                name: p.name
               });
             }
           }
-          // Hide lobby, start game
-          if ($('mp-lobby')) $('mp-lobby').classList.remove('active');
-          if ($('multiplayer-menu')) $('multiplayer-menu').classList.remove('active');
-          window.setupDifficulty(msg.difficulty);
-          window.startCountdown(3);
+          if (document.getElementById('mp-lobby')) document.getElementById('mp-lobby').classList.remove('active');
+          if (document.getElementById('multiplayer-menu')) document.getElementById('multiplayer-menu').classList.remove('active');
+          if (typeof window.setupDifficulty !== 'undefined') window.setupDifficulty(msg.difficulty);
+          if (typeof window.startCountdown !== 'undefined') window.startCountdown(3);
           break;
 
         case 'return_to_lobby':
-          MP.isMultiplayer = true; // explicitly keeping it enabled
-          gameState = 'START_SCREEN';
-          if (animationId) cancelAnimationFrame(animationId);
-          animationId = null;
-          if (window.countdownInterval) { clearInterval(window.countdownInterval); window.countdownInterval = null; }
-          if ($('pause-menu')) $('pause-menu').classList.remove('active');
-          if ($('game-over')) $('game-over').style.display = 'none';
-          if ($('start-menu')) $('start-menu').classList.remove('active');
-          if ($('mp-create-join')) $('mp-create-join').style.display = 'none';
-          if ($('mp-lobby')) $('mp-lobby').style.display = 'flex';
-          if ($('multiplayer-menu')) $('multiplayer-menu').classList.add('active');
-          if ($('pause-btn')) $('pause-btn').style.display = 'none';
-          if ($('countdown')) $('countdown').style.display = 'none';
-          // Clean the game state to ensure nothing renders
+          MP.isMultiplayer = true; 
+          if(typeof gameState !== 'undefined') gameState = 'START_SCREEN';
+          if (typeof animationId !== 'undefined' && animationId) cancelAnimationFrame(animationId);
+          if(typeof animationId !== 'undefined') animationId = null;
+          if (typeof window.countdownInterval !== 'undefined' && window.countdownInterval) { clearInterval(window.countdownInterval); window.countdownInterval = null; }
+          if (document.getElementById('pause-menu')) document.getElementById('pause-menu').classList.remove('active');
+          if (document.getElementById('game-over')) document.getElementById('game-over').style.display = 'none';
+          if (document.getElementById('start-menu')) document.getElementById('start-menu').classList.remove('active');
+          if (document.getElementById('mp-create-join')) document.getElementById('mp-create-join').style.display = 'none';
+          if (document.getElementById('mp-lobby')) document.getElementById('mp-lobby').style.display = 'flex';
+          if (document.getElementById('multiplayer-menu')) document.getElementById('multiplayer-menu').classList.add('active');
+          if (document.getElementById('pause-btn')) document.getElementById('pause-btn').style.display = 'none';
+          if (document.getElementById('countdown')) document.getElementById('countdown').style.display = 'none';
           if (typeof enemies !== 'undefined') {
-            for (let i = 0; i < enemies.length; i++) EnemyPool.release(enemies[i]);
+            for (let i = 0; i < enemies.length; i++) if(typeof EnemyPool !== 'undefined') EnemyPool.release(enemies[i]);
             bullets = []; enemies = []; powerUps = []; hearts = [];
           }
-          if (typeof ctx !== 'undefined' && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+          if (typeof ctx !== 'undefined' && typeof canvas !== 'undefined') ctx.clearRect(0, 0, canvas.width, canvas.height);
           break;
 
         case 'player_quit_game':
           if (this.isHost && this.remotePlayers.has(msg.id)) {
-            this.remotePlayers.get(msg.id).vida = 0; // kill them off locally so they vanish
+            this.remotePlayers.get(msg.id).vida = 0; 
           }
           break;
 
         case 'player_state': {
-          if (msg.id === this.playerId) break; // Don't process our own echoed state
+          if (msg.id === this.playerId) break;
           let rp = this.remotePlayers.get(msg.id);
-          if (!rp) {
-            rp = { x: msg.x, y: msg.y, angle: msg.angle, skin: msg.skin || 'classic',
-                   powers: msg.powers || {}, shield: msg.shield || 0, vida: msg.vida || 5,
-                   name: '', lastUpdate: Date.now(), tx: msg.x, ty: msg.y, tangle: msg.angle };
-            this.remotePlayers.set(msg.id, rp);
-          }
-          // Set interpolation targets
-          rp.tx = msg.x; rp.ty = msg.y; rp.tangle = msg.angle;
-          rp.skin = msg.skin || rp.skin;
-          rp.powers = msg.powers || rp.powers;
-          rp.shield = msg.shield || 0;
-          rp.vida = msg.vida !== undefined ? msg.vida : rp.vida;
-          rp.lastUpdate = Date.now();
+          if (!rp) break;
+          rp.x = rp.targetX; rp.y = rp.targetY; rp.angle = rp.targetAngle;
+          rp.targetX = msg.x; rp.targetY = msg.y; rp.targetAngle = msg.angle;
+          rp.skin = msg.skin;
+          rp.powers = msg.powers;
+          rp.shield = msg.shield;
+          rp.vida = msg.vida;
+          rp.lastUpdate = performance.now();
           break;
         }
 
-        case 'player_shoot': {
+        case 'player_shoot':
           if (msg.id === this.playerId) break;
-          // Add visual-only bullet
-          if (this.remoteBullets.length < 100) {
-            this.remoteBullets.push({
-              x: msg.x, y: msg.y, dx: msg.dx, dy: msg.dy,
-              color: msg.color, life: 60,
-            });
-          }
+          if (typeof SFX !== 'undefined') SFX.shoot();
+          this.remoteBullets.push({
+            x: msg.x, y: msg.y,
+            dx: msg.dx, dy: msg.dy,
+            color: msg.color,
+            source: msg.source,
+            life: 0
+          });
           break;
-        }
 
         case 'player_died':
           if (msg.id === this.playerId) break;
-          showAnnouncement('💀 ' + (msg.name || 'Aliado') + ' fue destruido');
+          if(typeof showAnnouncement !== 'undefined') showAnnouncement('💥 ' + msg.name + ' ha sido destruido');
           break;
 
-        case 'pong':
+        case 'game_over':
+          if (this.isHost) break; 
+          if(typeof gameState !== 'undefined') gameState = 'GAMEOVER';
+          if(typeof score !== 'undefined') score = msg.score;
+          if(typeof kills !== 'undefined') kills = msg.kills;
+          if(typeof time !== 'undefined') time = msg.time;
+          if(typeof endGame !== 'undefined') endGame();
+          break;
+
+        case 'error':
+          this.showError(msg.message);
           break;
       }
-    },
-
-    updateLobbyUI(players, isHost) {
-      const list = $('mp-player-list');
-      if (!list) return;
-      list.innerHTML = '';
-      for (const p of players) {
-        const li = document.createElement('div');
-        li.style.cssText = 'padding:8px 12px;background:rgba(0,255,255,0.05);border:1px solid rgba(0,255,255,0.15);border-radius:8px;display:flex;justify-content:space-between;align-items:center;';
-        li.innerHTML = `<span style="color:#fff;">${p.name}</span>` +
-          (p.isHost ? '<span style="color:#f1c40f;font-size:0.8rem;">👑 HOST</span>' : '<span style="color:#2ecc71;font-size:0.8rem;">🛸 PILOTO</span>');
-        list.appendChild(li);
-      }
-    },
-
-    // Interpolate and draw remote players each frame
-    updateAndDrawRemote() {
-      if (!this.isMultiplayer) return;
-
-      const now = Date.now();
-      const lerpFactor = 0.15;
-
-      for (const [id, rp] of this.remotePlayers) {
-        // Drop stale players (no update in 10s)
-        if (now - rp.lastUpdate > 10000) { this.remotePlayers.delete(id); continue; }
-
-        // Interpolate position
-        rp.x += (rp.tx - rp.x) * lerpFactor;
-        rp.y += (rp.ty - rp.y) * lerpFactor;
-
-        // Interpolate angle
-        let aDiff = rp.tangle - rp.angle;
-        aDiff = ((aDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
-        if (aDiff < -Math.PI) aDiff += Math.PI * 2;
-        rp.angle += aDiff * lerpFactor;
-
-        // Don't draw if off-screen
-        if (rp.x < camera.x - 100 || rp.x > camera.x + camera.width + 100 ||
-            rp.y < camera.y - 100 || rp.y > camera.y + camera.height + 100) continue;
-
-        // Build a temporary player-like object for drawPlayer
-        const fakeP = {
-          x: rp.x, y: rp.y, angle: rp.angle, size: 24,
-          skin: { type: rp.skin || 'classic', img: SKINS[rp.skin] || SKINS.classic },
-          powers: {
-            auto: rp.powers.auto ? 1 : 0,
-            manual: rp.powers.manual ? 1 : 0,
-            speed: 0,
-            shield: rp.shield ? 1 : 0,
-          },
-          debuffs: { slow: 0, disable: 0, noscore: 0, powerlock: 0 },
-        };
-
-        // Draw with a slight alpha tint to distinguish ally
-        ctx.save();
-        ctx.globalAlpha = 0.85;
-        drawPlayer(ctx, fakeP);
-        ctx.restore();
-
-        // Draw ally name tag
-        ctx.save();
-        ctx.font = 'bold 11px Orbitron';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#2ecc71';
-        ctx.globalAlpha = 0.8;
-        ctx.fillText(rp.name || 'Aliado', rp.x, rp.y - 38);
-        // Health indicator
-        if (rp.vida !== undefined && rp.vida < 99) {
-          ctx.fillStyle = 'rgba(255,255,255,0.2)';
-          ctx.fillRect(rp.x - 20, rp.y - 30, 40, 4);
-          ctx.fillStyle = rp.vida > 2 ? '#2ecc71' : '#ff3366';
-          ctx.fillRect(rp.x - 20, rp.y - 30, Math.min(40, (rp.vida / 5) * 40), 4);
-        }
-        ctx.restore();
-      }
-
-      // Draw remote bullets (visual only)
-      for (let i = this.remoteBullets.length - 1; i >= 0; i--) {
-        const b = this.remoteBullets[i];
-        b.x += b.dx; b.y += b.dy;
-        b.life--;
-        if (b.life <= 0 || b.x < 0 || b.x > WORLD.WIDTH || b.y < 0 || b.y > WORLD.HEIGHT) {
-          this.remoteBullets.splice(i, 1); continue;
-        }
-        if (b.x < camera.x - 20 || b.x > camera.x + camera.width + 20 ||
-            b.y < camera.y - 20 || b.y > camera.y + camera.height + 20) continue;
-        ctx.fillStyle = b.color;
-        ctx.globalAlpha = 0.3;
-        ctx.fillRect(b.x - 3, b.y - 3, 6, 6);
-        ctx.globalAlpha = 0.7;
-        ctx.fillStyle = '#aaffaa';
-        ctx.fillRect(b.x - 2, b.y - 2, 4, 4);
-        ctx.globalAlpha = 1.0;
-      }
-    },
+    }
   };
 
-  // ---- Multiplayer UI Handlers ----
-  window.openMultiplayer = function() {
-    $('start-menu').classList.remove('active');
-    $('multiplayer-menu').classList.add('active');
-    // Reset to create/join view
-    if ($('mp-create-join')) $('mp-create-join').style.display = 'flex';
-    if ($('mp-lobby')) $('mp-lobby').style.display = 'none';
-    if ($('mp-error')) $('mp-error').style.display = 'none';
-  };
-
-  window.closeMultiplayer = function() {
-    MP.disconnect();
-    $('multiplayer-menu').classList.remove('active');
-    $('start-menu').classList.add('active');
-  };
 
   window.mpCreateRoom = function() { MP.createRoom(); };
   window.mpJoinRoom = function() { MP.joinRoom(); };
