@@ -7,6 +7,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const WebSocket = require('ws');
 
 // ---- HTTP Static File Server ----
 const MIME_TYPES = {
@@ -87,133 +88,29 @@ class Room {
   }
 }
 
-// ---- Raw WebSocket Implementation ----
-function acceptWebSocket(req, socket, head) {
-  const key = req.headers['sec-websocket-key'];
-  if (!key) { socket.destroy(); return; }
+// ---- WebSocket Server (Using ws library) ----
+const wss = new WebSocket.Server({ noServer: true });
 
-  const acceptKey = crypto
-    .createHash('sha1')
-    .update(key + '258EAFA5-E914-47DA-95CA-5AB9FC6B06AE')
-    .digest('base64');
+wss.on('connection', (ws) => {
+  ws.on('message', (message) => {
+    try {
+      const msg = JSON.parse(message.toString());
+      handleMessage(ws, msg);
+    } catch (e) { /* ignore */ }
+  });
 
-  const handshake = [
-    'HTTP/1.1 101 Switching Protocols',
-    'Upgrade: websocket',
-    'Connection: Upgrade',
-    'Sec-WebSocket-Accept: ' + acceptKey,
-    '',
-    ''
-  ].join('\r\n');
-
-  socket.write(handshake);
-
-  const ws = {
-    socket,
-    readyState: 1, // OPEN
-    _buffer: Buffer.alloc(0),
-  };
-
-  function handleData(data) {
-    ws._buffer = Buffer.concat([ws._buffer, data]);
-    while (ws._buffer.length >= 2) {
-      const frame = parseFrame(ws._buffer);
-      if (!frame) break;
-      ws._buffer = ws._buffer.slice(frame.totalLength);
-
-      if (frame.opcode === 0x8) {
-        ws.readyState = 3;
-        socket.end();
-        handleDisconnect(ws);
-        return;
-      }
-      if (frame.opcode === 0x9) {
-        sendFrame(socket, frame.payload, 0xA);
-        continue;
-      }
-      if (frame.opcode === 0x1) {
-        try {
-          const msg = JSON.parse(frame.payload.toString('utf8'));
-          handleMessage(ws, msg);
-        } catch (e) { /* ignore */ }
-      }
-    }
-  }
-
-  if (head && head.length > 0) handleData(head);
-  socket.on('data', handleData);
-
-  socket.on('close', () => {
-    ws.readyState = 3;
+  ws.on('close', () => {
     handleDisconnect(ws);
   });
 
-  socket.on('error', () => {
-    ws.readyState = 3;
+  ws.on('error', () => {
     handleDisconnect(ws);
   });
-}
-
-function parseFrame(buf) {
-  if (buf.length < 2) return null;
-  const opcode = buf[0] & 0x0F;
-  const masked = !!(buf[1] & 0x80);
-  let payloadLen = buf[1] & 0x7F;
-  let offset = 2;
-
-  if (payloadLen === 126) {
-    if (buf.length < 4) return null;
-    payloadLen = buf.readUInt16BE(2);
-    offset = 4;
-  } else if (payloadLen === 127) {
-    if (buf.length < 10) return null;
-    payloadLen = Number(buf.readBigUInt64BE(2));
-    offset = 10;
-  }
-
-  const maskSize = masked ? 4 : 0;
-  const totalLength = offset + maskSize + payloadLen;
-  if (buf.length < totalLength) return null;
-
-  let payload = Buffer.from(buf.slice(offset + maskSize, totalLength));
-  if (masked) {
-    const mask = buf.slice(offset, offset + 4);
-    for (let i = 0; i < payload.length; i++) {
-      payload[i] ^= mask[i % 4];
-    }
-  }
-
-  return { opcode, payload, totalLength };
-}
-
-function sendFrame(socket, data, opcode = 0x1) {
-  if (!socket.writable) return;
-  const payload = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
-  const len = payload.length;
-  let header;
-
-  if (len < 126) {
-    header = Buffer.alloc(2);
-    header[0] = 0x80 | opcode;
-    header[1] = len;
-  } else if (len < 65536) {
-    header = Buffer.alloc(4);
-    header[0] = 0x80 | opcode;
-    header[1] = 126;
-    header.writeUInt16BE(len, 2);
-  } else {
-    header = Buffer.alloc(10);
-    header[0] = 0x80 | opcode;
-    header[1] = 127;
-    header.writeBigUInt64BE(BigInt(len), 2);
-  }
-
-  socket.write(Buffer.concat([header, payload]));
-}
+});
 
 function wsSend(ws, data) {
-  if (ws.readyState === 1) {
-    sendFrame(ws.socket, data);
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(typeof data === 'string' ? data : JSON.stringify(data));
   }
 }
 
@@ -457,7 +354,9 @@ function handleDisconnect(ws) {
 
 server.on('upgrade', (req, socket, head) => {
   if (req.url === '/ws') {
-    acceptWebSocket(req, socket, head);
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
   } else {
     socket.destroy();
   }
