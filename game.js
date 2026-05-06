@@ -299,6 +299,7 @@
   const ULTRA_MAX = 100; // Requires 100 kills to charge
   let ultraEnergy = 0;
   let flashAlpha = 0;
+  let enemyIdCounter = 0;  // Unique ID for each enemy (used in multiplayer sync)
 
   /* =========================================================
      INPUT HANDLING
@@ -431,6 +432,8 @@
     flashAlpha = 1.0;
     player.powers.shield = Math.max(player.powers.shield, 180); // 3 seconds invulnerability
     
+    // Collect killed enemy IDs for MP sync
+    const killedEids = [];
     for (const e of enemies) {
       const ultraPts = Math.ceil((e.pts + 5) * diffMultiplier * 2.0);
       addScore(ultraPts);
@@ -438,11 +441,17 @@
       killsMilestone++;
       createParticles(e.x, e.y, e.color, 30);
       createFloatingText(e.x, e.y, `+${ultraPts}`, '#ff007f');
+      if (e.eid) killedEids.push(e.eid);
     }
     for (let i = 0; i < enemies.length; i++) EnemyPool.release(enemies[i]);
     enemies = [];
     SFX.ultra();
     showAnnouncement("⚡ ¡FLASH NOVA! ⚡");
+    
+    // In MP, broadcast the ultra to all players so they clear the same enemies
+    if (MP.isMultiplayer) {
+      MP.send({ type: 'ultra_flash', killedEids, playerName: MP.playerName || 'Piloto' });
+    }
   }
 
   // Touch — INVISIBLE joystick (gesture-based, no fixed UI)
@@ -1143,12 +1152,19 @@
      ENEMY SPAWNING
      ========================================================= */
   function spawnEnemies() {
+    // In multiplayer mode, only the host spawns enemies. Clients receive enemies via network.
+    if (MP.isMultiplayer && !MP.isHost) return;
+
     if (frame % Math.floor(spawnRate) !== 0) return;
 
     // Unlock new enemies
     if (score >= unlockedEnemies * currentUnlockInterval && unlockedEnemies < ENEMY_TYPES.length) {
       unlockedEnemies++;
       showAnnouncement('NUEVA AMENAZA: ' + ENEMY_TYPES[unlockedEnemies - 1].name.toUpperCase());
+      // In MP, broadcast unlock to clients
+      if (MP.isMultiplayer && MP.isHost) {
+        MP.send({ type: 'enemy_unlock', unlockedEnemies, enemyName: ENEMY_TYPES[unlockedEnemies - 1].name });
+      }
     }
 
     // PERFORMANCE: Limit total enemies on screen to prevent lag
@@ -1172,10 +1188,22 @@
     const baseSpeed = Math.min((selectedType.speed + score * 0.0001) * diffMultiplierSpeed, PLAYER_BASE_SPEED * 0.95);
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.max(camera.width, camera.height) * 0.7; // Spawn slightly further out to avoid popping
-    const spawnX = clamp(player.x + Math.cos(angle) * dist, 100, WORLD.WIDTH - 100);
-    const spawnY = clamp(player.y + Math.sin(angle) * dist, 100, WORLD.HEIGHT - 100);
+    // In MP mode, spawn enemies around the center of all players, not just the host
+    let spawnCenterX = player.x, spawnCenterY = player.y;
+    if (MP.isMultiplayer && MP.isHost) {
+      let totalX = player.x, totalY = player.y, count = 1;
+      for (const [, rp] of MP.remotePlayers) {
+        if (rp.vida > 0) { totalX += rp.targetX; totalY += rp.targetY; count++; }
+      }
+      spawnCenterX = totalX / count;
+      spawnCenterY = totalY / count;
+    }
+    const spawnX = clamp(spawnCenterX + Math.cos(angle) * dist, 100, WORLD.WIDTH - 100);
+    const spawnY = clamp(spawnCenterY + Math.sin(angle) * dist, 100, WORLD.HEIGHT - 100);
 
+    enemyIdCounter++;
     const baseEnemy = EnemyPool.get();
+    baseEnemy.eid = enemyIdCounter; // Unique enemy ID for multiplayer sync
     baseEnemy.x = spawnX; baseEnemy.y = spawnY;
     baseEnemy.size = selectedType.size; baseEnemy.speed = baseSpeed;
     baseEnemy.type = selectedType.shape; baseEnemy.color = selectedType.color;
@@ -1184,6 +1212,20 @@
     baseEnemy.spellTimer = 0;
     baseEnemy.angle = Math.atan2(player.y - spawnY, player.x - spawnX);
     enemies.push(baseEnemy);
+
+    // In MP, broadcast enemy spawn to all clients
+    if (MP.isMultiplayer && MP.isHost) {
+      MP.send({
+        type: 'enemy_spawn',
+        eid: baseEnemy.eid,
+        x: baseEnemy.x, y: baseEnemy.y,
+        speed: baseEnemy.speed,
+        shape: baseEnemy.type, color: baseEnemy.color,
+        hp: baseEnemy.hp, maxHp: baseEnemy.maxHp,
+        name: baseEnemy.name, pts: baseEnemy.pts,
+        angle: baseEnemy.angle, size: baseEnemy.size,
+      });
+    }
   }
 
   /* =========================================================
@@ -1195,14 +1237,45 @@
     const maxDistSq = 2500 * 2500; // Cull enemies too far away to prevent ghost accumulation lag
 
     for (const e of enemies) {
-      const dx = player.x - e.x;
-      const dy = player.y - e.y;
+      // In MP mode, find the nearest player (local or remote) to chase
+      let targetX = player.x, targetY = player.y;
+      if (MP.isMultiplayer) {
+        let bestDist = (player.x - e.x) * (player.x - e.x) + (player.y - e.y) * (player.y - e.y);
+        for (const [, rp] of MP.remotePlayers) {
+          if (rp.vida <= 0) continue;
+          const rdx = rp.targetX - e.x, rdy = rp.targetY - e.y;
+          const rd = rdx * rdx + rdy * rdy;
+          if (rd < bestDist) { bestDist = rd; targetX = rp.targetX; targetY = rp.targetY; }
+        }
+      }
+
+      const dx = targetX - e.x;
+      const dy = targetY - e.y;
       const distSq = dx * dx + dy * dy;
 
-      // Distance culling (respawn if too far)
-      if (distSq > maxDistSq) {
-        EnemyPool.release(e);
-        continue;
+      // Distance culling - in MP check if far from ALL players
+      if (MP.isMultiplayer) {
+        let closeToAny = false;
+        const localDsq = (player.x - e.x) * (player.x - e.x) + (player.y - e.y) * (player.y - e.y);
+        if (localDsq < maxDistSq) closeToAny = true;
+        if (!closeToAny) {
+          for (const [, rp] of MP.remotePlayers) {
+            if (rp.vida <= 0) continue;
+            const rdx = rp.targetX - e.x, rdy = rp.targetY - e.y;
+            if (rdx * rdx + rdy * rdy < maxDistSq) { closeToAny = true; break; }
+          }
+        }
+        if (!closeToAny) {
+          // In MP, broadcast enemy removal
+          if (MP.isHost) MP.send({ type: 'enemy_remove', eid: e.eid });
+          EnemyPool.release(e);
+          continue;
+        }
+      } else {
+        if (distSq > maxDistSq) {
+          EnemyPool.release(e);
+          continue;
+        }
       }
 
       const d = Math.sqrt(distSq);
@@ -1242,17 +1315,16 @@
       // Enemy AI: Superpowers for Elite Enemies
       e.spellTimer++;
 
+      // For AI targeting, use direction to nearest player
       if (e.name === 'Interceptor' && e.spellTimer > 250 && d > 1) {
-        // Slow targeted fire
         bullets.push({ 
           x: e.x, y: e.y, 
-          dx: (dx/d)*2.2, dy: (dy/d)*2.2, // Slower projectile speed
+          dx: (dx/d)*2.2, dy: (dy/d)*2.2,
           color: '#ff007f', 
           source: 'enemy_bullet' 
         });
         e.spellTimer = 0;
       } else if (e.name === 'Goliath' && e.spellTimer > 360) {
-        // Healer: Restores 100% HP to other enemies
         let healedAny = false;
         for (const other of enemies) {
           if (other !== e && other.hp < other.maxHp) {
@@ -1267,7 +1339,6 @@
         }
         e.spellTimer = 0;
       } else if (e.name === 'Overlord' && e.spellTimer > 200 && d > 1) {
-        // Keeping the original Overlord spread/bullets but slower
         bullets.push({ x: e.x, y: e.y, dx: -(dx/d)*3, dy: -(dy/d)*3, color: '#f1c40f', source: 'enemy_bullet' });
         e.spellTimer = 0;
       } else if (e.name === 'Pulsar' && e.spellTimer > 200 && d > 1) {
@@ -1277,7 +1348,7 @@
 
       let dead = false;
 
-      // Bullet collision
+      // Bullet collision (local player's bullets + enemy bullets vs local player)
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         
@@ -1293,11 +1364,14 @@
                 createParticles(player.x, player.y, '#ff3366', 20);
                 shakeAmt = 15; damageFlash = 0.5;
                 SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
+                // In MP, broadcast that this player took damage
+                if (MP.isMultiplayer) {
+                  MP.send({ type: 'player_hit', id: MP.playerId, vida: player.vida });
+                }
               } else {
-                // Enemy projectile hits: just standard slow/disable
                 const roll = Math.random();
                 const type = roll < 0.5 ? 'slow' : 'disable';
-                player.debuffs[type] = 300; // Increased to 5 seconds
+                player.debuffs[type] = 300;
                 showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
                 SFX.hit();
               }
@@ -1312,8 +1386,8 @@
             
             // Overlord Shield Check: Invulnerable during 4s of 10s cycle
             if (e.name === 'Overlord') {
-              const cycle = frame % 600; // 10s cycle (600 frames)
-              if (cycle < 240) { // First 4s: Shielded
+              const cycle = frame % 600;
+              if (cycle < 240) {
                 createParticles(b.x, b.y, '#00ffff', 5);
                 bullets.splice(i, 1);
                 SFX.hit();
@@ -1324,6 +1398,12 @@
             bullets.splice(i, 1);
             e.hp--;
             createParticles(b.x, b.y, '#ffffff', 4);
+
+            // In MP, broadcast this hit to all players
+            if (MP.isMultiplayer) {
+              MP.send({ type: 'enemy_hit', eid: e.eid, hp: e.hp, hx: b.x, hy: b.y });
+            }
+
             if (e.hp <= 0) {
               dead = true;
               let multiplier = (b.source === 'manual') ? 1.5 : 1.0;
@@ -1336,6 +1416,40 @@
               createParticles(e.x, e.y, e.color, 20);
               createFloatingText(e.x, e.y, `+${pts}`, '#f1c40f');
               SFX.kill();
+              // In MP, broadcast kill to all players
+              if (MP.isMultiplayer) {
+                MP.send({ type: 'enemy_killed_sync', eid: e.eid, x: e.x, y: e.y, color: e.color, pts, killerName: MP.playerName || 'Piloto' });
+              }
+              break;
+            } else {
+              SFX.hit();
+            }
+          }
+        }
+      }
+
+      // In MP mode: also check remote bullets vs enemies (cooperative damage)
+      if (MP.isMultiplayer && !dead) {
+        for (let i = MP.remoteBullets.length - 1; i >= 0; i--) {
+          const rb = MP.remoteBullets[i];
+          if (rb.source && rb.source.startsWith('enemy_')) continue; // Skip enemy bullets
+          if (Math.abs(rb.x - e.x) < e.size && Math.abs(rb.y - e.y) < e.size) {
+            // Overlord shield check
+            if (e.name === 'Overlord' && (frame % 600) < 240) {
+              createParticles(rb.x, rb.y, '#00ffff', 5);
+              MP.remoteBullets.splice(i, 1);
+              continue;
+            }
+            MP.remoteBullets.splice(i, 1);
+            e.hp--;
+            createParticles(rb.x, rb.y, '#ffffff', 4);
+            if (e.hp <= 0) {
+              dead = true;
+              const pts = Math.ceil((e.pts + 5) * diffMultiplier);
+              // Remote player gets the points in their client; we just show effects
+              createParticles(e.x, e.y, e.color, 20);
+              createFloatingText(e.x, e.y, `+${pts}`, '#2ecc71');
+              SFX.kill();
               break;
             } else {
               SFX.hit();
@@ -1345,19 +1459,17 @@
       }
 
       // Player collision directly with enemy body
-      const pdx = player.x - e.x;
-      const pdy = player.y - e.y;
-      const distSqBody = pdx * pdx + pdy * pdy;
+      const pdx2 = player.x - e.x;
+      const pdy2 = player.y - e.y;
+      const distSqBody = pdx2 * pdx2 + pdy2 * pdy2;
       const collisionThreshold = (player.size + e.size) * 0.7;
       
       if (!dead && distSqBody < collisionThreshold * collisionThreshold) {
         if (player.powers.shield <= 0) {
           
-          // Collision penalty check for Overlord Shield (Player gets knocked back/damaged)
           let canDamagePlayer = true;
           if (e.name === 'Overlord' && (frame % 600) < 240) {
-             // If shield is active, Overlord doesn't take damage even on body collision
-             // but still damages player
+             // Shield active, damages player but Overlord survives
           }
 
           if (!isPractice) player.vida--;
@@ -1367,9 +1479,15 @@
           SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
           
           if (e.name === 'Overlord' && (frame % 600) < 240) {
-             dead = false; // Don't kill Overlord if shielded
+             dead = false;
           } else {
              dead = true;
+          }
+
+          // In MP, broadcast player hit and enemy death
+          if (MP.isMultiplayer) {
+            MP.send({ type: 'player_hit', id: MP.playerId, vida: player.vida });
+            if (dead) MP.send({ type: 'enemy_killed_sync', eid: e.eid, x: e.x, y: e.y, color: e.color, pts: 0, killerName: MP.playerName || 'Piloto' });
           }
         } else {
           const shieldPts = Math.ceil(e.pts * diffMultiplier * 0.5);
@@ -1382,6 +1500,9 @@
         }
         dead = true;
         createParticles(e.x, e.y, e.color, 15);
+        if (MP.isMultiplayer && dead) {
+          MP.send({ type: 'enemy_killed_sync', eid: e.eid, x: e.x, y: e.y, color: e.color, pts: 0, killerName: MP.playerName || 'Piloto' });
+        }
       }
 
       if (!dead) { alive.push(e); } else { EnemyPool.release(e); }
@@ -2217,7 +2338,13 @@
     updateUI();
 
     // Multiplayer: send local state to server
-    if (MP.isMultiplayer) MP.sendState();
+    if (MP.isMultiplayer) {
+      MP.sendState();
+      // Host periodically broadcasts all enemy positions for sync
+      if (MP.isHost && frame % 6 === 0) {
+        MP.sendEnemySync();
+      }
+    }
 
     for (const d in player.debuffs) if (player.debuffs[d] > 0) player.debuffs[d]--;
 
@@ -2654,10 +2781,13 @@
     hostId: null,
     players: new Map(),
     isMultiplayer: false,
+    playerName: 'Piloto',
     remotePlayers: new Map(), 
     remoteBullets: [],        
     lastStateSend: 0,
-    STATE_INTERVAL: 50,       
+    lastEnemySync: 0,
+    STATE_INTERVAL: 50,
+    ENEMY_SYNC_INTERVAL: 100, // ms between enemy position syncs
 
     generateId() {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -2729,6 +2859,7 @@
       const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
       
       this.disconnect();
+      this.playerName = name;
       this.roomId = this.generateId();
       this.isHost = true;
       this.playerId = 'host-' + this.roomId;
@@ -2783,6 +2914,7 @@
       if (!code || code.length < 4) { this.showError('Código inválido.'); return; }
       
       this.disconnect();
+      this.playerName = name;
       this.roomId = code;
       this.isHost = false;
       this.playerId = 'client-' + this.generateId();
@@ -2952,6 +3084,30 @@
 
     sendShoot(bx, by, bdx, bdy, color, source) {
       this.send({ type: 'player_shoot', id: this.playerId, x: bx, y: by, dx: bdx, dy: bdy, color, source });
+    },
+
+    // Host-only: broadcast compact enemy positions for sync
+    sendEnemySync() {
+      if (!this.isHost || !this.isMultiplayer) return;
+      const now = performance.now();
+      if (now - this.lastEnemySync < this.ENEMY_SYNC_INTERVAL) return;
+      this.lastEnemySync = now;
+      // Send in batches of 15 to avoid oversized messages
+      const batchSize = 15;
+      for (let start = 0; start < enemies.length; start += batchSize) {
+        const batch = [];
+        const end = Math.min(start + batchSize, enemies.length);
+        for (let i = start; i < end; i++) {
+          const e = enemies[i];
+          batch.push({
+            eid: e.eid, x: Math.round(e.x), y: Math.round(e.y),
+            hp: e.hp, angle: +(e.angle || 0).toFixed(2),
+          });
+        }
+        if (batch.length > 0) {
+          this.send({ type: 'enemy_sync', batch });
+        }
+      }
     },
 
     sendDeath() {
@@ -3179,6 +3335,105 @@
 
         case 'error':
           this.showError(msg.message);
+          break;
+
+        case 'enemy_spawn':
+          if (this.isHost) break; // Host already spawned it
+          const newEnemy = EnemyPool.get();
+          newEnemy.eid = msg.eid;
+          newEnemy.x = msg.x; newEnemy.y = msg.y;
+          newEnemy.speed = msg.speed;
+          newEnemy.type = msg.shape; newEnemy.color = msg.color;
+          newEnemy.hp = msg.hp; newEnemy.maxHp = msg.maxHp;
+          newEnemy.name = msg.name; newEnemy.pts = msg.pts;
+          newEnemy.angle = msg.angle; newEnemy.size = msg.size;
+          newEnemy.spellTimer = 0;
+          enemies.push(newEnemy);
+          break;
+
+        case 'enemy_sync':
+          if (this.isHost) break; // Host sends this
+          if (!msg.batch) break;
+          for (const b of msg.batch) {
+            const e = enemies.find(e => e.eid === b.eid);
+            if (e) {
+              e.x = b.x; e.y = b.y; e.hp = b.hp;
+              if (b.angle !== undefined) e.angle = b.angle;
+            }
+          }
+          break;
+
+        case 'enemy_hit':
+          if (this.isHost) break; // Host computes hits itself
+          const hitE = enemies.find(e => e.eid === msg.eid);
+          if (hitE) {
+            hitE.hp = msg.hp;
+            if (typeof createParticles !== 'undefined') createParticles(msg.hx, msg.hy, '#ffffff', 4);
+            if (typeof SFX !== 'undefined') SFX.hit();
+          }
+          break;
+
+        case 'enemy_killed_sync':
+          if (this.isHost) break; // Host knows
+          const killedE = enemies.find(e => e.eid === msg.eid);
+          if (killedE) {
+            killedE.hp = 0;
+            if (typeof createParticles !== 'undefined') createParticles(msg.x, msg.y, msg.color, 20);
+            if (msg.pts > 0 && typeof createFloatingText !== 'undefined') createFloatingText(msg.x, msg.y, `+${msg.pts}`, '#2ecc71');
+            if (typeof SFX !== 'undefined') SFX.kill();
+            // Client doesn't get the points locally unless they were the killer, but it's cooperative so we can add them
+            if (typeof addScore !== 'undefined' && msg.pts > 0) {
+               addScore(msg.pts);
+               kills++;
+               if (typeof ultraEnergy !== 'undefined' && ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
+            }
+          }
+          break;
+
+        case 'enemy_remove':
+          if (this.isHost) break;
+          const remIdx = enemies.findIndex(e => e.eid === msg.eid);
+          if (remIdx !== -1) {
+            if (typeof EnemyPool !== 'undefined') EnemyPool.release(enemies[remIdx]);
+            enemies.splice(remIdx, 1);
+          }
+          break;
+
+        case 'enemy_unlock':
+          if (this.isHost) break;
+          if (typeof unlockedEnemies !== 'undefined') unlockedEnemies = msg.unlockedEnemies;
+          if (typeof showAnnouncement !== 'undefined') showAnnouncement('NUEVA AMENAZA: ' + msg.enemyName.toUpperCase());
+          break;
+
+        case 'ultra_flash':
+          if (this.isHost) break;
+          if (msg.killedEids && Array.isArray(msg.killedEids)) {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+              const e = enemies[i];
+              if (msg.killedEids.includes(e.eid)) {
+                if (typeof createParticles !== 'undefined') createParticles(e.x, e.y, e.color, 30);
+                if (typeof EnemyPool !== 'undefined') EnemyPool.release(e);
+                enemies.splice(i, 1);
+              }
+            }
+          } else {
+             // Fallback: clear all
+             for (let i = 0; i < enemies.length; i++) if (typeof EnemyPool !== 'undefined') EnemyPool.release(enemies[i]);
+             enemies = [];
+          }
+          if (typeof SFX !== 'undefined') SFX.ultra();
+          if (typeof showAnnouncement !== 'undefined') showAnnouncement("⚡ ¡FLASH NOVA COOPERATIVO! ⚡");
+          break;
+
+        case 'player_hit':
+          // Optionally show effect on the remote player
+          if (msg.id === this.playerId) break; // We already handled our own hit
+          let rp_hit = this.remotePlayers.get(msg.id);
+          if (rp_hit) {
+             rp_hit.vida = msg.vida;
+             if (typeof createParticles !== 'undefined') createParticles(rp_hit.x, rp_hit.y, '#ff3366', 15);
+             if (typeof SFX !== 'undefined') SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
+          }
           break;
       }
     }
