@@ -1122,19 +1122,11 @@
       targetAngle = Math.atan2(kbDirY, kbDirX);
     }
 
-    // Angular-velocity rotation (inertia) for PC — feels natural and smooth
-    // Mobile keeps instant snap for responsiveness
+    // Smooth rotation — stable lerp toward target angle, same for PC and mobile
     let angleDiff = targetAngle - player.angle;
     angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
     if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    if (isMobile) {
-      player.angle += angleDiff * 0.75; // instant on mobile
-    } else {
-      if (player._angularVel === undefined) player._angularVel = 0;
-      player._angularVel += angleDiff * 0.22;   // angular acceleration
-      player._angularVel *= 0.68;               // friction / damping
-      player.angle += player._angularVel;
-    }
+    player.angle += angleDiff * 0.65;
 
     // Apply Slowness Debuff
     if (player.debuffs.slow > 0) {
@@ -2393,18 +2385,24 @@
     drawEntities();
     drawCollectibles();
     drawPlayer();
-    // Multiplayer client: smoothly interpolate enemies toward host-synced positions
+    // Client-side: smoothly interpolate enemies toward the host-synced positions.
+    // Teleport if the gap is large (e.g. newly spawned or big network skip).
     if (MP.isMultiplayer && !MP.isHost) {
       for (const e of enemies) {
         if (e._targetX !== undefined) {
-          e.x += (e._targetX - e.x) * 0.25;
-          e.y += (e._targetY - e.y) * 0.25;
+          const dx = e._targetX - e.x, dy = e._targetY - e.y;
+          if (dx * dx + dy * dy > 90000) {   // >300px gap → teleport
+            e.x = e._targetX; e.y = e._targetY;
+          } else {
+            e.x += dx * 0.5;
+            e.y += dy * 0.5;
+          }
         }
         if (e._targetAngle !== undefined) {
           let aDiff = e._targetAngle - (e.angle || 0);
           aDiff = ((aDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
           if (aDiff < -Math.PI) aDiff += Math.PI * 2;
-          e.angle = (e.angle || 0) + aDiff * 0.25;
+          e.angle = (e.angle || 0) + aDiff * 0.5;
         }
       }
     }
@@ -2449,8 +2447,8 @@
     // Multiplayer: send local state to server
     if (MP.isMultiplayer) {
       MP.sendState();
-      // Host periodically broadcasts all enemy positions for sync
-      if (MP.isHost && frame % 6 === 0) {
+      // Host broadcasts enemy positions every 3 frames (~50ms at 60fps)
+      if (MP.isHost && frame % 3 === 0) {
         MP.sendEnemySync();
       }
     }
@@ -2895,8 +2893,8 @@
     remoteBullets: [],        
     lastStateSend: 0,
     lastEnemySync: 0,
-    STATE_INTERVAL: 50,
-    ENEMY_SYNC_INTERVAL: 100, // ms between enemy position syncs
+    STATE_INTERVAL: 33,           // ~30 position updates/sec
+    ENEMY_SYNC_INTERVAL: 50,      // ms between host enemy syncs
 
     generateId() {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -3240,10 +3238,10 @@
       for (const [id, rp] of this.remotePlayers.entries()) {
         if (rp.vida <= 0) continue;
 
-        // Smooth interpolation toward network-received target position
-        rp.x += (rp.targetX - rp.x) * 0.2;
-        rp.y += (rp.targetY - rp.y) * 0.2;
-        rp.angle += (rp.targetAngle - rp.angle) * 0.2;
+        // Fast interpolation — 0.35/frame means <3 frames to be within 1% of target
+        rp.x += (rp.targetX - rp.x) * 0.35;
+        rp.y += (rp.targetY - rp.y) * 0.35;
+        rp.angle += (rp.targetAngle - rp.angle) * 0.35;
 
         // Only render when visible on screen
         const onScreen = (
