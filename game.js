@@ -1126,7 +1126,15 @@
     let angleDiff = targetAngle - player.angle;
     angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
     if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    player.angle += angleDiff * 0.65;
+    if (isMobile) {
+      player.angle += angleDiff * 0.75;
+    } else {
+      const maxTurn = 0.22;
+      let turn = angleDiff * 0.35;
+      if (turn > maxTurn) turn = maxTurn;
+      if (turn < -maxTurn) turn = -maxTurn;
+      player.angle += turn;
+    }
 
     // Apply Slowness Debuff
     if (player.debuffs.slow > 0) {
@@ -3631,6 +3639,12 @@
                addScore(msg.pts);
                kills++;
                if (typeof ultraEnergy !== 'undefined' && ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
+            }
+            // Actually remove the dead enemy from the client's list so it doesn't linger
+            const remIdx = enemies.indexOf(killedE);
+            if (remIdx !== -1) {
+              if (typeof EnemyPool !== 'undefined') EnemyPool.release(killedE);
+              enemies.splice(remIdx, 1);
             }
           }
           break;
