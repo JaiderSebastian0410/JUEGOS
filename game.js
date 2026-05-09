@@ -1232,6 +1232,63 @@
      ENEMY UPDATE & COLLISIONS
      ========================================================= */
   function updateEnemies() {
+    // In multiplayer client mode: enemies are controlled exclusively by the host.
+    // Clients only render enemy positions received via enemy_sync — no local AI/movement.
+    if (MP.isMultiplayer && !MP.isHost) {
+      // Still check bullet vs enemy collisions locally for responsive feedback,
+      // but do NOT move enemies or run AI.
+      buildSpatialGrid(enemies);
+      for (const e of enemies) {
+        // Player bullets vs enemies (hit feedback only — host confirms kills)
+        for (let i = bullets.length - 1; i >= 0; i--) {
+          const b = bullets[i];
+          if (b.source === 'manual' || b.source === 'auto') {
+            if (Math.abs(b.x - e.x) < e.size && Math.abs(b.y - e.y) < e.size) {
+              // Send hit to host; host will confirm kill via enemy_killed_sync
+              MP.send({ type: 'enemy_hit', eid: e.eid, hp: e.hp - 1, hx: b.x, hy: b.y });
+              createParticles(b.x, b.y, '#ffffff', 4);
+              SFX.hit();
+              bullets.splice(i, 1);
+              break;
+            }
+          }
+          // Enemy projectiles vs local player
+          if (b.source && b.source.startsWith('enemy_')) {
+            const pdx = player.x - b.x, pdy = player.y - b.y;
+            if (Math.hypot(pdx, pdy) < player.size) {
+              bullets.splice(i, 1);
+              if (player.powers.shield <= 0) {
+                if (b.source === 'enemy_bullet') {
+                  if (!isPractice) player.vida--;
+                  createParticles(player.x, player.y, '#ff3366', 20);
+                  shakeAmt = 15; damageFlash = 0.5;
+                  SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
+                  MP.send({ type: 'player_hit', id: MP.playerId, vida: player.vida });
+                } else {
+                  const roll = Math.random();
+                  const type = roll < 0.5 ? 'slow' : 'disable';
+                  player.debuffs[type] = 300;
+                  showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
+                  SFX.hit();
+                }
+              }
+            }
+          }
+        }
+        // Player body collision
+        const pdx2 = player.x - e.x, pdy2 = player.y - e.y;
+        if (Math.hypot(pdx2, pdy2) < (player.size + e.size) * 0.7) {
+          if (player.powers.shield <= 0) {
+            if (!isPractice) player.vida--;
+            damageFlash = 1.0; shakeAmt = 20;
+            createParticles(player.x, player.y, '#ff3366', 30);
+            SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
+            MP.send({ type: 'player_hit', id: MP.playerId, vida: player.vida });
+          }
+        }
+      }
+      return;
+    }
     buildSpatialGrid(enemies);
     const alive = [];
     const maxDistSq = 2500 * 2500; // Cull enemies too far away to prevent ghost accumulation lag
@@ -2192,7 +2249,7 @@
   /* =========================================================
      HUD UPDATE
      ========================================================= */
-  const cachedUI = { vida: -1, kills: -1, score: -1, time: -1, power: '', ultra: -1 };
+  const cachedUI = { vida: -1, kills: -1, score: -1, time: -1, power: '', ultra: -1, coords: '' };
   function updateUI() {
     const curVida = isPractice ? '∞' : player.vida;
     if (cachedUI.vida !== curVida) {
@@ -2242,6 +2299,23 @@
         }
       }
       cachedUI.ultra = uPct;
+    }
+
+    // Coordinates display — only visible while PLAYING (hidden on pause/menu)
+    const coordEl = $('player-coords');
+    if (coordEl) {
+      if (gameState === 'PLAYING') {
+        const cx = Math.round(player.x);
+        const cy = Math.round(player.y);
+        const coordStr = `X:${cx}  Y:${cy}`;
+        if (cachedUI.coords !== coordStr) {
+          coordEl.innerText = coordStr;
+          cachedUI.coords = coordStr;
+        }
+        coordEl.style.display = 'block';
+      } else {
+        coordEl.style.display = 'none';
+      }
     }
   }
 
@@ -2302,12 +2376,30 @@
     drawEntities();
     drawCollectibles();
     drawPlayer();
-    // Multiplayer: draw allies and their bullets
+    // Multiplayer client: smoothly interpolate enemies toward host-synced positions
+    if (MP.isMultiplayer && !MP.isHost) {
+      for (const e of enemies) {
+        if (e._targetX !== undefined) {
+          e.x += (e._targetX - e.x) * 0.25;
+          e.y += (e._targetY - e.y) * 0.25;
+        }
+        if (e._targetAngle !== undefined) {
+          let aDiff = e._targetAngle - (e.angle || 0);
+          aDiff = ((aDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+          if (aDiff < -Math.PI) aDiff += Math.PI * 2;
+          e.angle = (e.angle || 0) + aDiff * 0.25;
+        }
+      }
+    }
+    // Multiplayer: draw allies and their bullets (world-space)
     MP.updateAndDrawRemote();
     updateAndDrawParticles();
     updateAndDrawFloatingTexts();
 
     ctx.restore();
+
+    // Draw off-screen ally arrows in screen-space (after world ctx.restore)
+    MP.drawOffScreenArrows();
 
     // Damage Flash
     if (damageFlash > 0) {
@@ -3126,63 +3218,140 @@
 
     updateAndDrawRemote() {
       if (!this.isMultiplayer) return;
-      
-      for (const [id, rp] of this.remotePlayers.entries()) {
-        if (rp.vida <= 0) continue; 
 
+      // --- Draw remote players & off-screen arrows (in world-space ctx) ---
+      for (const [id, rp] of this.remotePlayers.entries()) {
+        if (rp.vida <= 0) continue;
+
+        // Smooth interpolation toward target position
         rp.x += (rp.targetX - rp.x) * 0.2;
         rp.y += (rp.targetY - rp.y) * 0.2;
         rp.angle += (rp.targetAngle - rp.angle) * 0.2;
 
-        ctx.save();
-        ctx.translate(rp.x, rp.y);
-        ctx.rotate(rp.angle);
-        const activeSkin = typeof window.SKINS !== 'undefined' ? window.SKINS[rp.skin] || window.SKINS['classic'] : { color: '#fff' };
-        if (activeSkin.image && activeSkin.image.complete) {
-          ctx.drawImage(activeSkin.image, -activeSkin.width/2, -activeSkin.height/2, activeSkin.width, activeSkin.height);
-        } else {
-          ctx.beginPath();
-          ctx.moveTo(15, 0); ctx.lineTo(-10, 10); ctx.lineTo(-10, -10);
-          ctx.fillStyle = activeSkin.color || '#fff';
-          ctx.fill();
-        }
-        
-        if (rp.shield) {
-          ctx.beginPath();
-          ctx.arc(0, 0, 30, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-        ctx.restore();
+        // Check if ally is visible on screen (in world coordinates)
+        const onScreen = (
+          rp.x >= camera.x - 50 && rp.x <= camera.x + camera.width + 50 &&
+          rp.y >= camera.y - 50 && rp.y <= camera.y + camera.height + 50
+        );
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = '10px "Inter", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(rp.name, rp.x, rp.y - 35);
-        
-        ctx.fillStyle = 'red';
-        ctx.fillRect(rp.x - 20, rp.y - 30, 40, 4);
-        ctx.fillStyle = '#0f0';
-        ctx.fillRect(rp.x - 20, rp.y - 30, 40 * (rp.vida / 100), 4);
+        if (onScreen) {
+          // Draw ally ship
+          ctx.save();
+          ctx.translate(rp.x, rp.y);
+          ctx.rotate(rp.angle + Math.PI / 2);
+          // Draw a simple arrow ship shape for remote player
+          ctx.beginPath();
+          ctx.moveTo(0, -20); ctx.lineTo(12, 12); ctx.lineTo(0, 6); ctx.lineTo(-12, 12);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(0,255,200,0.85)';
+          ctx.strokeStyle = '#00ffcc';
+          ctx.lineWidth = 2;
+          if (!isMobile) { ctx.shadowBlur = 12; ctx.shadowColor = '#00ffcc'; }
+          ctx.fill(); ctx.stroke();
+          if (!isMobile) ctx.shadowBlur = 0;
+          ctx.restore();
+
+          // Shield ring
+          if (rp.shield) {
+            ctx.save(); ctx.translate(rp.x, rp.y);
+            ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0,255,255,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.restore();
+          }
+
+          // Name label
+          ctx.fillStyle = 'rgba(255,255,255,0.8)';
+          ctx.font = 'bold 11px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(rp.name, rp.x, rp.y - 36);
+
+          // Vida bar
+          ctx.fillStyle = 'rgba(255,0,0,0.6)';
+          ctx.fillRect(rp.x - 20, rp.y - 30, 40, 4);
+          ctx.fillStyle = '#00ff88';
+          ctx.fillRect(rp.x - 20, rp.y - 30, 40 * Math.max(0, rp.vida / 100), 4);
+        }
       }
 
+      // Remote bullets
       for (let i = this.remoteBullets.length - 1; i >= 0; i--) {
         const b = this.remoteBullets[i];
-        b.x += b.dx;
-        b.y += b.dy;
-        b.life += 1;
-        
+        b.x += b.dx; b.y += b.dy; b.life += 1;
         ctx.save();
         ctx.translate(b.x, b.y);
         ctx.rotate(Math.atan2(b.dy, b.dx));
         ctx.fillStyle = b.color;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = b.color;
+        if (!isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = b.color; }
         ctx.fillRect(-10, -2, 20, 4);
         ctx.restore();
-        
         if (b.life > 100) this.remoteBullets.splice(i, 1);
+      }
+    },
+
+    // Called AFTER ctx.restore() (screen-space) to draw edge arrows for off-screen allies
+    drawOffScreenArrows() {
+      if (!this.isMultiplayer) return;
+      const MARGIN = 40; // distance from screen edge
+      const ARROW_SIZE = 14;
+
+      for (const [id, rp] of this.remotePlayers.entries()) {
+        if (rp.vida <= 0) continue;
+
+        // Check if off-screen
+        const onScreen = (
+          rp.x >= camera.x - 50 && rp.x <= camera.x + camera.width + 50 &&
+          rp.y >= camera.y - 50 && rp.y <= camera.y + camera.height + 50
+        );
+        if (onScreen) continue;
+
+        // Angle from screen center toward ally
+        const screenCX = camera.width / 2;
+        const screenCY = camera.height / 2;
+        // Convert ally world pos to screen pos
+        const sx = rp.x - camera.x;
+        const sy = rp.y - camera.y;
+        const angle = Math.atan2(sy - screenCY, sx - screenCX);
+
+        // Clamp arrow position to screen edge
+        const halfW = camera.width / 2 - MARGIN;
+        const halfH = camera.height / 2 - MARGIN;
+        const tanA = Math.tan(angle);
+        let ax, ay;
+        if (Math.abs(Math.cos(angle)) * halfH > Math.abs(Math.sin(angle)) * halfW) {
+          // Hits left/right edge
+          ax = Math.sign(Math.cos(angle)) * halfW;
+          ay = ax * tanA;
+        } else {
+          // Hits top/bottom edge
+          ay = Math.sign(Math.sin(angle)) * halfH;
+          ax = ay / tanA;
+        }
+        ax += screenCX; ay += screenCY;
+
+        // Draw arrow
+        ctx.save();
+        ctx.translate(ax, ay);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(ARROW_SIZE, 0);
+        ctx.lineTo(-ARROW_SIZE * 0.6, -ARROW_SIZE * 0.6);
+        ctx.lineTo(-ARROW_SIZE * 0.3, 0);
+        ctx.lineTo(-ARROW_SIZE * 0.6, ARROW_SIZE * 0.6);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0,255,200,0.85)';
+        ctx.strokeStyle = '#00ffcc';
+        ctx.lineWidth = 1.5;
+        if (!isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#00ffcc'; }
+        ctx.fill(); ctx.stroke();
+        if (!isMobile) ctx.shadowBlur = 0;
+
+        // Name label near arrow
+        ctx.rotate(-angle);
+        ctx.font = 'bold 9px Inter, sans-serif';
+        ctx.fillStyle = '#00ffcc';
+        ctx.textAlign = 'center';
+        ctx.fillText(rp.name, 0, -ARROW_SIZE - 4);
+        ctx.restore();
       }
     },
 
@@ -3357,14 +3526,49 @@
           for (const b of msg.batch) {
             const e = enemies.find(e => e.eid === b.eid);
             if (e) {
-              e.x = b.x; e.y = b.y; e.hp = b.hp;
-              if (b.angle !== undefined) e.angle = b.angle;
+              // Smooth interpolation: store target, animate toward it each frame
+              e._targetX = b.x; e._targetY = b.y;
+              e.hp = b.hp;
+              if (b.angle !== undefined) e._targetAngle = b.angle;
+              // Initialize current pos if first sync
+              if (e._syncInit === undefined) {
+                e.x = b.x; e.y = b.y;
+                e.angle = b.angle || 0;
+                e._syncInit = true;
+              }
             }
           }
           break;
 
         case 'enemy_hit':
-          if (this.isHost) break; // Host computes hits itself
+          if (this.isHost) {
+            // HOST: a client hit an enemy — apply damage authoritatively
+            const hitE = enemies.find(e => e.eid === msg.eid);
+            if (hitE) {
+              hitE.hp = msg.hp; // client already decremented hp by 1
+              if (typeof createParticles !== 'undefined') createParticles(msg.hx, msg.hy, '#ffffff', 4);
+              if (typeof SFX !== 'undefined') SFX.hit();
+              if (hitE.hp <= 0) {
+                // Broadcast kill to all players
+                const pts = Math.ceil((hitE.pts + 5) * diffMultiplier);
+                if (typeof addScore !== 'undefined') addScore(pts);
+                kills++; killsMilestone++;
+                if (ultraEnergy < ULTRA_MAX) ultraEnergy = Math.min(ULTRA_MAX, ultraEnergy + 1);
+                if (typeof createParticles !== 'undefined') createParticles(hitE.x, hitE.y, hitE.color, 20);
+                if (typeof createFloatingText !== 'undefined') createFloatingText(hitE.x, hitE.y, `+${pts}`, '#2ecc71');
+                if (typeof SFX !== 'undefined') SFX.kill();
+                this.send({ type: 'enemy_killed_sync', eid: hitE.eid, x: hitE.x, y: hitE.y, color: hitE.color, pts, killerName: msg._sender || 'Aliado' });
+                // Remove from host enemy list
+                const idx = enemies.indexOf(hitE);
+                if (idx !== -1) { EnemyPool.release(hitE); enemies.splice(idx, 1); }
+              } else {
+                // Relay updated hp to other clients
+                this.send({ type: 'enemy_hit', eid: hitE.eid, hp: hitE.hp, hx: msg.hx, hy: msg.hy });
+              }
+            }
+            break;
+          }
+          // CLIENT: show hit visual from another player's bullet
           const hitE = enemies.find(e => e.eid === msg.eid);
           if (hitE) {
             hitE.hp = msg.hp;
@@ -3509,6 +3713,14 @@
   window.mpSetDifficulty = (el) => MP.setDifficulty(el.value);
   window.mpStartGame = () => MP.requestStartGame();
   window.mpCopyRoomId = () => MP.copyRoomId();
+  // Leave room: disconnect and return to menu
+  window.mpLeaveRoom = function() {
+    MP.disconnect();
+    if (typeof animationId !== 'undefined' && animationId) cancelAnimationFrame(animationId);
+    animationId = null;
+    document.querySelectorAll('.overlay').forEach(m => m.classList.remove('active'));
+    $('start-menu').classList.add('active');
+  };
   window.mpEndGame = function() {
     if (!MP.isMultiplayer) return;
     if (MP.isHost) {

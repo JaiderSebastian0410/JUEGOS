@@ -240,6 +240,9 @@
   <!-- Pause Button (HUD) -->
   <button id="pause-btn" style="position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.4); border: 1px solid #00ffff; color: #00ffff; width: 50px; height: 50px; border-radius: 50%; font-size: 1.5rem; cursor: pointer; display: none; z-index: 100;" onclick="pauseGame(true)">||</button>
 
+  <!-- Player Coordinates HUD (top-left, hidden on pause) -->
+  <div id="player-coords" style="display:none; position:absolute; top:15px; left:15px; z-index:100; font-family:'Orbitron',sans-serif; font-size:0.7rem; color:rgba(0,255,255,0.75); background:rgba(0,0,0,0.45); padding:4px 10px; border-radius:6px; border:1px solid rgba(0,255,255,0.2); letter-spacing:1px; pointer-events:none;">X:0  Y:0</div>
+
   <!-- Pause Menu -->
   <div id="pause-menu" class="overlay">
     <h1 style="color: #00ffff;">PAUSA</h1>
@@ -395,7 +398,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <!-- Game Engine -->
-  <script src="game.js?v=28"></script>
+  <script src="game.js?v=29"></script>
 
   <!-- Menu Background Animation -->
   <script>
