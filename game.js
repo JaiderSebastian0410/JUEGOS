@@ -1114,18 +1114,27 @@
     player.x += moveX;
     player.y += moveY;
 
-    // Rotation: mouse ONLY while held, otherwise keyboard
+    // Rotation: mouse while held → aim at cursor; keyboard → aim at movement direction
     let targetAngle = player.angle;
     if (isMouseDown && !isMobile) {
       targetAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
     } else if (Math.abs(kbDirX) > 0.01 || Math.abs(kbDirY) > 0.01) {
       targetAngle = Math.atan2(kbDirY, kbDirX);
     }
-    // Smooth lerp rotation
+
+    // Angular-velocity rotation (inertia) for PC — feels natural and smooth
+    // Mobile keeps instant snap for responsiveness
     let angleDiff = targetAngle - player.angle;
     angleDiff = ((angleDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
     if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    player.angle += angleDiff * 0.75;
+    if (isMobile) {
+      player.angle += angleDiff * 0.75; // instant on mobile
+    } else {
+      if (player._angularVel === undefined) player._angularVel = 0;
+      player._angularVel += angleDiff * 0.22;   // angular acceleration
+      player._angularVel *= 0.68;               // friction / damping
+      player.angle += player._angularVel;
+    }
 
     // Apply Slowness Debuff
     if (player.debuffs.slow > 0) {
@@ -1232,54 +1241,62 @@
      ENEMY UPDATE & COLLISIONS
      ========================================================= */
   function updateEnemies() {
-    // In multiplayer client mode: enemies are controlled exclusively by the host.
-    // Clients only render enemy positions received via enemy_sync — no local AI/movement.
+    // ── MULTIPLAYER CLIENT ───────────────────────────────────────────────────
+    // Enemies are authoritative on the host; clients only do local collision
+    // detection for responsive feedback, but never move or despawn enemies.
     if (MP.isMultiplayer && !MP.isHost) {
-      // Still check bullet vs enemy collisions locally for responsive feedback,
-      // but do NOT move enemies or run AI.
+      // Initialise per-player hit-cooldown (invincibility frames) to prevent
+      // damage being re-applied every frame while overlapping an enemy body.
+      if (player._hitCooldown === undefined) player._hitCooldown = 0;
+      if (player._hitCooldown > 0) player._hitCooldown--;
+
       buildSpatialGrid(enemies);
+
       for (const e of enemies) {
-        // Player bullets vs enemies (hit feedback only — host confirms kills)
+        // ── Own bullets → enemy (send hit to host for authoritative damage) ──
         for (let i = bullets.length - 1; i >= 0; i--) {
           const b = bullets[i];
+
           if (b.source === 'manual' || b.source === 'auto') {
             if (Math.abs(b.x - e.x) < e.size && Math.abs(b.y - e.y) < e.size) {
-              // Send hit to host; host will confirm kill via enemy_killed_sync
               MP.send({ type: 'enemy_hit', eid: e.eid, hp: e.hp - 1, hx: b.x, hy: b.y });
               createParticles(b.x, b.y, '#ffffff', 4);
               SFX.hit();
               bullets.splice(i, 1);
               break;
             }
+            continue; // skip shield/enemy-bullet logic for player bullets
           }
-          // Enemy projectiles vs local player
+
+          // ── Enemy projectiles → local player ─────────────────────────────
           if (b.source && b.source.startsWith('enemy_')) {
-            const pdx = player.x - b.x, pdy = player.y - b.y;
-            if (Math.hypot(pdx, pdy) < player.size) {
+            if (Math.hypot(player.x - b.x, player.y - b.y) < player.size) {
               bullets.splice(i, 1);
-              if (player.powers.shield <= 0) {
+              if (player.powers.shield <= 0 && player._hitCooldown <= 0) {
                 if (b.source === 'enemy_bullet') {
                   if (!isPractice) player.vida--;
+                  player._hitCooldown = 90;
+                  damageFlash = 0.5; shakeAmt = 15;
                   createParticles(player.x, player.y, '#ff3366', 20);
-                  shakeAmt = 15; damageFlash = 0.5;
                   SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
                   MP.send({ type: 'player_hit', id: MP.playerId, vida: player.vida });
                 } else {
-                  const roll = Math.random();
-                  const type = roll < 0.5 ? 'slow' : 'disable';
-                  player.debuffs[type] = 300;
-                  showAnnouncement(type === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
+                  const debuffType = Math.random() < 0.5 ? 'slow' : 'disable';
+                  player.debuffs[debuffType] = 300;
+                  showAnnouncement(debuffType === 'slow' ? '⚠ NAVE LENTA' : '⚠ SISTEMAS BLOQUEADOS');
                   SFX.hit();
                 }
               }
             }
           }
         }
-        // Player body collision
-        const pdx2 = player.x - e.x, pdy2 = player.y - e.y;
-        if (Math.hypot(pdx2, pdy2) < (player.size + e.size) * 0.7) {
-          if (player.powers.shield <= 0) {
+
+        // ── Enemy body → local player (with invincibility frames) ─────────
+        if (player._hitCooldown <= 0 && player.powers.shield <= 0) {
+          const bodyDist = Math.hypot(player.x - e.x, player.y - e.y);
+          if (bodyDist < (player.size + e.size) * 0.7) {
             if (!isPractice) player.vida--;
+            player._hitCooldown = 90; // ~1.5 s invincibility
             damageFlash = 1.0; shakeAmt = 20;
             createParticles(player.x, player.y, '#ff3366', 30);
             SFX.play(100, 20, 'sawtooth', 0.2, 0.5);
@@ -3219,71 +3236,97 @@
     updateAndDrawRemote() {
       if (!this.isMultiplayer) return;
 
-      // --- Draw remote players & off-screen arrows (in world-space ctx) ---
+      // ── Remote players (world-space) ─────────────────────────────────────
       for (const [id, rp] of this.remotePlayers.entries()) {
         if (rp.vida <= 0) continue;
 
-        // Smooth interpolation toward target position
+        // Smooth interpolation toward network-received target position
         rp.x += (rp.targetX - rp.x) * 0.2;
         rp.y += (rp.targetY - rp.y) * 0.2;
         rp.angle += (rp.targetAngle - rp.angle) * 0.2;
 
-        // Check if ally is visible on screen (in world coordinates)
+        // Only render when visible on screen
         const onScreen = (
-          rp.x >= camera.x - 50 && rp.x <= camera.x + camera.width + 50 &&
-          rp.y >= camera.y - 50 && rp.y <= camera.y + camera.height + 50
+          rp.x >= camera.x - 60 && rp.x <= camera.x + camera.width + 60 &&
+          rp.y >= camera.y - 60 && rp.y <= camera.y + camera.height + 60
         );
+        if (!onScreen) continue;
 
-        if (onScreen) {
-          // Draw ally ship
-          ctx.save();
-          ctx.translate(rp.x, rp.y);
+        // ── Draw ally ship using their actual selected skin ────────────────
+        const skinImg = SKINS[rp.skin];
+        const hasImg = skinImg && (skinImg instanceof HTMLImageElement || skinImg instanceof HTMLCanvasElement) && skinImg.width > 0;
+
+        ctx.save();
+        ctx.translate(rp.x, rp.y);
+
+        if (hasImg) {
+          // Match drawPlayer() angle convention: classic faces right, others face up
+          const finalAngle = rp.skin === 'classic'
+            ? rp.angle
+            : rp.angle + Math.PI / 2;
+          ctx.rotate(finalAngle);
+          const s = 24 * 2.2;
+          ctx.drawImage(skinImg, -s / 2, -s / 2, s, s);
+        } else {
+          // Vector fallback — friendly-coloured arrow
           ctx.rotate(rp.angle + Math.PI / 2);
-          // Draw a simple arrow ship shape for remote player
+          const sz = 24;
           ctx.beginPath();
-          ctx.moveTo(0, -20); ctx.lineTo(12, 12); ctx.lineTo(0, 6); ctx.lineTo(-12, 12);
+          ctx.moveTo(0, -sz); ctx.lineTo(sz * 0.8, sz); ctx.lineTo(0, sz - 6); ctx.lineTo(-sz * 0.8, sz);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(0,255,200,0.85)';
+          ctx.fillStyle = '#101015';
           ctx.strokeStyle = '#00ffcc';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2.5;
           if (!isMobile) { ctx.shadowBlur = 12; ctx.shadowColor = '#00ffcc'; }
           ctx.fill(); ctx.stroke();
           if (!isMobile) ctx.shadowBlur = 0;
-          ctx.restore();
-
-          // Shield ring
-          if (rp.shield) {
-            ctx.save(); ctx.translate(rp.x, rp.y);
-            ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(0,255,255,0.6)'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.restore();
-          }
-
-          // Name label
-          ctx.fillStyle = 'rgba(255,255,255,0.8)';
-          ctx.font = 'bold 11px Inter, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(rp.name, rp.x, rp.y - 36);
-
-          // Vida bar
-          ctx.fillStyle = 'rgba(255,0,0,0.6)';
-          ctx.fillRect(rp.x - 20, rp.y - 30, 40, 4);
-          ctx.fillStyle = '#00ff88';
-          ctx.fillRect(rp.x - 20, rp.y - 30, 40 * Math.max(0, rp.vida / 100), 4);
         }
+        ctx.restore();
+
+        // Shield ring
+        if (rp.shield) {
+          ctx.save(); ctx.translate(rp.x, rp.y);
+          ctx.beginPath(); ctx.arc(0, 0, 39, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(52,152,219,0.8)'; ctx.lineWidth = 3; ctx.stroke();
+          ctx.restore();
+        }
+
+        // Name label
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = 'bold 11px Orbitron, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(rp.name, rp.x, rp.y - 38);
+
+        // HP bar (use actual vida range 0-5 if transmitted properly, fallback 0-100)
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(rp.x - 20, rp.y - 32, 40, 4);
+        ctx.fillStyle = '#00ff88';
+        ctx.fillRect(rp.x - 20, rp.y - 32, 40 * Math.max(0, Math.min(1, rp.vida / 100)), 4);
       }
 
-      // Remote bullets
+      // ── Remote player bullets ─────────────────────────────────────────────
       for (let i = this.remoteBullets.length - 1; i >= 0; i--) {
         const b = this.remoteBullets[i];
         b.x += b.dx; b.y += b.dy; b.life += 1;
+
+        // Skip off-screen bullets
+        if (b.x < camera.x - 20 || b.x > camera.x + camera.width + 20 ||
+            b.y < camera.y - 20 || b.y > camera.y + camera.height + 20) {
+          if (b.life > 60) this.remoteBullets.splice(i, 1);
+          continue;
+        }
+
         ctx.save();
         ctx.translate(b.x, b.y);
         ctx.rotate(Math.atan2(b.dy, b.dx));
         ctx.fillStyle = b.color;
-        if (!isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = b.color; }
-        ctx.fillRect(-10, -2, 20, 4);
+        ctx.globalAlpha = 0.4;
+        ctx.fillRect(-6, -4, 12, 8);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-4, -2, 8, 4);
         ctx.restore();
+
         if (b.life > 100) this.remoteBullets.splice(i, 1);
       }
     },
