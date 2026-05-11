@@ -2389,31 +2389,34 @@
     updateCollectibles();
     checkMilestones();
 
-    // Draw
-    drawEntities();
-    drawCollectibles();
-    drawPlayer();
-    // Client-side: smoothly interpolate enemies toward the host-synced positions.
-    // Teleport if the gap is large (e.g. newly spawned or big network skip).
+    // FIX: Interpolate enemy positions BEFORE drawing (clients see smooth positions)
     if (MP.isMultiplayer && !MP.isHost) {
       for (const e of enemies) {
         if (e._targetX !== undefined) {
           const dx = e._targetX - e.x, dy = e._targetY - e.y;
-          if (dx * dx + dy * dy > 90000) {   // >300px gap → teleport
+          const dSq = dx * dx + dy * dy;
+          if (dSq > 160000) {
             e.x = e._targetX; e.y = e._targetY;
-          } else {
-            e.x += dx * 0.5;
-            e.y += dy * 0.5;
+          } else if (dSq > 0.25) {
+            const d = Math.sqrt(dSq);
+            const step = Math.min(e.speed * 1.5, d);
+            e.x += (dx / d) * step;
+            e.y += (dy / d) * step;
           }
         }
         if (e._targetAngle !== undefined) {
           let aDiff = e._targetAngle - (e.angle || 0);
           aDiff = ((aDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
           if (aDiff < -Math.PI) aDiff += Math.PI * 2;
-          e.angle = (e.angle || 0) + aDiff * 0.5;
+          e.angle = (e.angle || 0) + aDiff * 0.25;
         }
       }
     }
+
+    // Draw
+    drawEntities();
+    drawCollectibles();
+    drawPlayer();
     // Multiplayer: draw allies and their bullets (world-space)
     MP.updateAndDrawRemote();
     updateAndDrawParticles();
@@ -2455,8 +2458,8 @@
     // Multiplayer: send local state to server
     if (MP.isMultiplayer) {
       MP.sendState();
-      // Host broadcasts enemy positions every 3 frames (~50ms at 60fps)
-      if (MP.isHost && frame % 3 === 0) {
+      // Host broadcasts enemy positions every 2 frames (~33ms) for smoother interp
+      if (MP.isHost && frame % 2 === 0) {
         MP.sendEnemySync();
       }
     }
@@ -2981,36 +2984,44 @@
       this.hostId = this.playerId;
       
       this.players.set(this.playerId, { id: this.playerId, name: name, isHost: true });
+      this._roomReadyFired = false;     // FIX: prevent duplicate room_created
+      this._peerIdToGameId = new Map(); // FIX: PeerJS ID -> game playerId
+
+      const fireRoomCreated = () => {
+        if (this._roomReadyFired) return;
+        this._roomReadyFired = true;
+        this.connected = true;
+        this.onMessage({ type: 'room_created', roomId: this.roomId, playerId: this.playerId, players: this.getPlayerList() });
+      };
 
       if (typeof mqtt !== 'undefined') {
         try {
           this.clientMQTT = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
           this.clientMQTT.on('connect', () => {
-            if (!this.connected) {
-               this.connected = true;
-               this.onMessage({ type: 'room_created', roomId: this.roomId, playerId: this.playerId, players: this.getPlayerList() });
-            }
             this.clientMQTT.subscribe(`sdpro/${this.roomId}/host`);
+            fireRoomCreated();
           });
           this.clientMQTT.on('message', (topic, payload) => this.handleIncomingMessage(payload.toString(), 'mqtt'));
+          this.clientMQTT.on('error', () => {});
         } catch(e) {}
       }
 
       if (typeof Peer !== 'undefined') {
         try {
           this.peer = new Peer('sdpro-' + this.roomId, {
-            host: '0.peerjs.com', port: 443, secure: true, debug: 1,
-            config: { iceServers: [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:"turn:openrelay.metered.ca:80",username:"openrelayproject",credential:"openrelayproject"},{urls:"turn:openrelay.metered.ca:443?transport=tcp",username:"openrelayproject",credential:"openrelayproject"}] }
+            host: '0.peerjs.com', port: 443, secure: true, debug: 0,
+            config: { iceServers: [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},{urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}] }
           });
-          this.peer.on('open', () => {
-            if (!this.connected) {
-               this.connected = true;
-               this.onMessage({ type: 'room_created', roomId: this.roomId, playerId: this.playerId, players: this.getPlayerList() });
-            }
-          });
+          this.peer.on('open', () => { fireRoomCreated(); });
+          this.peer.on('error', () => {});
           this.peer.on('connection', (conn) => {
+            conn.on('open', () => {});
             conn.on('data', (msg) => this.handleIncomingMessage(msg, conn));
-            conn.on('close', () => this.handleClientDisconnect(conn.peer));
+            // FIX: use _peerIdToGameId to resolve game playerId on disconnect
+            conn.on('close', () => {
+              const gid = this._peerIdToGameId ? this._peerIdToGameId.get(conn.peer) : null;
+              if (gid) this.handleClientDisconnect(gid);
+            });
           });
         } catch(e) {}
       }
@@ -3089,6 +3100,10 @@
            if (!this.players.has(sender)) {
              this.clientConns.set(sender, source); // source is 'mqtt' or conn object
              this.players.set(sender, { id: sender, name: msg.name, isHost: false });
+             // FIX: store PeerJS peer ID -> game playerId for disconnect cleanup
+             if (source !== 'mqtt' && source && source.peer && this._peerIdToGameId) {
+               this._peerIdToGameId.set(source.peer, sender);
+             }
              
              const diffEl = document.getElementById('mp-difficulty');
              const joinedConfirm = {
@@ -3099,7 +3114,7 @@
              
              if (source === 'mqtt' && this.clientMQTT) {
                this.clientMQTT.publish(`sdpro/${this.roomId}/clients`, JSON.stringify(joinedConfirm));
-             } else if (source.open) {
+             } else if (source && source.open) {
                source.send(joinedConfirm);
              }
 
@@ -3307,7 +3322,7 @@
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(rp.x - 20, rp.y - 32, 40, 4);
         ctx.fillStyle = '#00ff88';
-        ctx.fillRect(rp.x - 20, rp.y - 32, 40 * Math.max(0, Math.min(1, rp.vida / 100)), 4);
+        ctx.fillRect(rp.x - 20, rp.y - 32, 40 * Math.max(0, Math.min(1, rp.vida / 5)), 4);
       }
 
       // ── Remote player bullets ─────────────────────────────────────────────
@@ -3515,7 +3530,12 @@
           if (msg.id === this.playerId) break;
           let rp = this.remotePlayers.get(msg.id);
           if (!rp) break;
-          rp.x = rp.targetX; rp.y = rp.targetY; rp.angle = rp.targetAngle;
+          // FIX: don't snap — only teleport on first packet or very large gap
+          const _dx = msg.x - rp.x, _dy = msg.y - rp.y;
+          if (!rp._posInited || (_dx*_dx + _dy*_dy) > 250000) {
+            rp.x = msg.x; rp.y = msg.y; rp.angle = msg.angle;
+            rp._posInited = true;
+          }
           rp.targetX = msg.x; rp.targetY = msg.y; rp.targetAngle = msg.angle;
           rp.skin = msg.skin;
           rp.powers = msg.powers;
@@ -3527,7 +3547,10 @@
 
         case 'player_shoot':
           if (msg.id === this.playerId) break;
-          if (typeof SFX !== 'undefined') SFX.shoot();
+          // FIX: SFX.shoot() does not exist
+          if (typeof SFX !== 'undefined') {
+            if (msg.source === 'manual') SFX.shootManual(); else SFX.shootAuto();
+          }
           this.remoteBullets.push({
             x: msg.x, y: msg.y,
             dx: msg.dx, dy: msg.dy,
