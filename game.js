@@ -1245,6 +1245,15 @@
     // Enemies are authoritative on the host; clients only do local collision
     // detection for responsive feedback, but never move or despawn enemies.
     if (MP.isMultiplayer && !MP.isHost) {
+      const now = performance.now();
+      // Auto-remove enemies that host stopped syncing (fixes "frozen dead enemies")
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        if (now - (enemies[i]._lastSyncTime || now) > 1500) {
+          if (typeof EnemyPool !== 'undefined') EnemyPool.release(enemies[i]);
+          enemies.splice(i, 1);
+        }
+      }
+      
       // Initialise per-player hit-cooldown (invincibility frames) to prevent
       // damage being re-applied every frame while overlapping an enemy body.
       if (player._hitCooldown === undefined) player._hitCooldown = 0;
@@ -3232,6 +3241,7 @@
           batch.push({
             eid: e.eid, x: Math.round(e.x), y: Math.round(e.y),
             hp: e.hp, angle: +(e.angle || 0).toFixed(2),
+            type: e.type, color: e.color, size: e.size, speed: e.speed, maxHp: e.maxHp
           });
         }
         if (batch.length > 0) {
@@ -3261,10 +3271,10 @@
       for (const [id, rp] of this.remotePlayers.entries()) {
         if (rp.vida <= 0) continue;
 
-        // Fast interpolation — 0.35/frame means <3 frames to be within 1% of target
-        rp.x += (rp.targetX - rp.x) * 0.35;
-        rp.y += (rp.targetY - rp.y) * 0.35;
-        rp.angle += (rp.targetAngle - rp.angle) * 0.35;
+        // Smoother interpolation for jittery mobile connections (0.15 vs 0.35)
+        rp.x += (rp.targetX - rp.x) * 0.15;
+        rp.y += (rp.targetY - rp.y) * 0.15;
+        rp.angle += (rp.targetAngle - rp.angle) * 0.15;
 
         // Only render when visible on screen
         const onScreen = (
@@ -3596,18 +3606,29 @@
           if (this.isHost) break; // Host sends this
           if (!msg.batch) break;
           for (const b of msg.batch) {
-            const e = enemies.find(e => e.eid === b.eid);
-            if (e) {
-              // Smooth interpolation: store target, animate toward it each frame
-              e._targetX = b.x; e._targetY = b.y;
-              e.hp = b.hp;
-              if (b.angle !== undefined) e._targetAngle = b.angle;
-              // Initialize current pos if first sync
-              if (e._syncInit === undefined) {
-                e.x = b.x; e.y = b.y;
-                e.angle = b.angle || 0;
-                e._syncInit = true;
-              }
+            let e = enemies.find(e => e.eid === b.eid);
+            if (!e) {
+               // Recover lost enemy if spawn packet was dropped
+               if (typeof EnemyPool !== 'undefined') {
+                 e = EnemyPool.get();
+                 e.eid = b.eid; e.x = b.x; e.y = b.y;
+                 e.type = b.type || 'circle'; e.color = b.color || '#ff0044';
+                 e.size = b.size || 15; e.speed = b.speed || 1.5;
+                 e.hp = b.hp; e.maxHp = b.maxHp || b.hp;
+                 e.spellTimer = 0; e.angle = b.angle || 0;
+                 enemies.push(e);
+               } else { continue; }
+            }
+            e._lastSyncTime = performance.now();
+            // Smooth interpolation: store target, animate toward it each frame
+            e._targetX = b.x; e._targetY = b.y;
+            e.hp = b.hp;
+            if (b.angle !== undefined) e._targetAngle = b.angle;
+            // Initialize current pos if first sync
+            if (e._syncInit === undefined) {
+              e.x = b.x; e.y = b.y;
+              e.angle = b.angle || 0;
+              e._syncInit = true;
             }
           }
           break;
