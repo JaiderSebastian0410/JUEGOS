@@ -314,6 +314,19 @@
     </div>
   </div>
 
+  <!-- Platform Warning Menu -->
+  <div id="platform-warning-menu" class="overlay">
+    <h1 style="color: #f1c40f;">⚠️ ADVERTENCIA</h1>
+    <div style="background: rgba(5, 10, 20, 0.95); padding: 25px; border-radius: 12px; width: 100%; max-width: 450px; text-align: center; border: 1px solid rgba(241,196,15,0.5); box-shadow: 0 0 25px rgba(241,196,15,0.3);">
+      <p style="font-size: 1.1rem; color: #fff; margin-bottom: 15px;">Estás intentando unirte a una sala de <strong id="warning-room-platform" style="color:#f1c40f;">PC</strong> desde un dispositivo <strong id="warning-my-platform" style="color:#2ecc71;">Móvil</strong>.</p>
+      <p style="font-size: 0.9rem; color: #aaa; margin-bottom: 25px;">La experiencia de juego podría no ser óptima debido a las diferencias de controles y rendimiento.<br>¿Deseas continuar?</p>
+      <div style="display: flex; gap: 15px; justify-content: center;">
+        <button class="btn secondary" style="min-width: 130px; border-color: #ff3366; color: #ff3366;" onclick="cancelPlatformJoin()">Cancelar</button>
+        <button class="btn" style="min-width: 130px; border-color: #2ecc71; color: #2ecc71;" onclick="confirmPlatformJoin()">Continuar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Multiplayer Menu -->
   <div id="multiplayer-menu" class="overlay">
     <h1 style="color: #2ecc71;">🌐 MULTIJUGADOR</h1>

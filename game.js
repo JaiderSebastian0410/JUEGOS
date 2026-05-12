@@ -2906,6 +2906,7 @@
     roomId: null,
     playerId: null,
     hostId: null,
+    roomPlatform: null,
     players: new Map(),
     isMultiplayer: false,
     playerName: 'Piloto',
@@ -2991,6 +2992,7 @@
       this.isHost = true;
       this.playerId = 'host-' + this.roomId;
       this.hostId = this.playerId;
+      this.roomPlatform = isMobile ? 'mobile' : 'pc';
       
       this.players.set(this.playerId, { id: this.playerId, name: name, isHost: true });
       this._roomReadyFired = false;     // FIX: prevent duplicate room_created
@@ -3000,7 +3002,7 @@
         if (this._roomReadyFired) return;
         this._roomReadyFired = true;
         this.connected = true;
-        this.onMessage({ type: 'room_created', roomId: this.roomId, playerId: this.playerId, players: this.getPlayerList() });
+        this.onMessage({ type: 'room_created', roomId: this.roomId, roomPlatform: this.roomPlatform, playerId: this.playerId, players: this.getPlayerList() });
       };
 
       if (typeof mqtt !== 'undefined') {
@@ -3061,7 +3063,7 @@
           });
           this.clientMQTT.on('connect', () => {
             this.clientMQTT.subscribe(`sdpro/${this.roomId}/clients`);
-            this.clientMQTT.publish(`sdpro/${this.roomId}/host`, JSON.stringify({ type: 'join', name: name, _sender: this.playerId }));
+            this.clientMQTT.publish(`sdpro/${this.roomId}/host`, JSON.stringify({ type: 'join', name: name, platform: isMobile ? 'mobile' : 'pc', _sender: this.playerId }));
           });
           this.clientMQTT.on('message', (t, p) => this.handleIncomingMessage(p.toString(), 'mqtt'));
         } catch(e) {}
@@ -3076,7 +3078,7 @@
           this.peer.on('open', () => {
             this.hostConn = this.peer.connect('sdpro-' + code);
             this.hostConn.on('open', () => {
-               this.hostConn.send({ type: 'join', name: name, _sender: this.playerId });
+               this.hostConn.send({ type: 'join', name: name, platform: isMobile ? 'mobile' : 'pc', _sender: this.playerId });
             });
             this.hostConn.on('data', (msg) => this.handleIncomingMessage(msg, 'peerjs'));
             this.hostConn.on('close', () => {
@@ -3106,6 +3108,16 @@
       if (this.isHost) {
         const sender = msg._sender || msg.id;
         if (msg.type === 'join') {
+           // Verifica si hay diferencia de plataformas (PC vs Móvil) y si el cliente no ha forzado la entrada.
+           if (msg.platform && msg.platform !== this.roomPlatform && !msg.force) {
+               const warningMsg = { type: 'platform_warning', roomPlatform: this.roomPlatform, targetId: sender, protocol: source === 'mqtt' ? 'mqtt' : 'peerjs' };
+               if (source === 'mqtt' && this.clientMQTT) {
+                 this.clientMQTT.publish(`sdpro/${this.roomId}/clients`, JSON.stringify(warningMsg));
+               } else if (source && source.open) {
+                 source.send(warningMsg);
+               }
+               return; // Detiene el proceso de unión hasta que el cliente confirme.
+           }
            if (!this.players.has(sender)) {
              this.clientConns.set(sender, source); // source is 'mqtt' or conn object
              this.players.set(sender, { id: sender, name: msg.name, isHost: false });
@@ -3143,6 +3155,18 @@
         }
       } else {
         if (msg._exclude === this.playerId) return; 
+
+        if (msg.type === 'platform_warning' && msg.targetId === this.playerId) {
+            const wRoom = document.getElementById('warning-room-platform');
+            const wMy = document.getElementById('warning-my-platform');
+            const wMenu = document.getElementById('platform-warning-menu');
+            if (wRoom) wRoom.innerText = msg.roomPlatform === 'pc' ? 'PC' : 'Móvil';
+            if (wMy) wMy.innerText = isMobile ? 'Móvil' : 'PC';
+            if (wMenu) wMenu.classList.add('active');
+            this.activeProtocol = msg.protocol;
+            return;
+        }
+
         if (msg.type === 'room_joined' && msg.targetId === this.playerId) {
            if (!this.activeProtocol) {
               this.activeProtocol = msg.protocol;
@@ -3831,5 +3855,19 @@
     }
   };
   window.MP = MP;
+
+  window.cancelPlatformJoin = function() {
+    const m = document.getElementById('platform-warning-menu');
+    if (m) m.classList.remove('active');
+    MP.disconnect();
+  };
+
+  window.confirmPlatformJoin = function() {
+    const m = document.getElementById('platform-warning-menu');
+    if (m) m.classList.remove('active');
+    const nameEl = document.getElementById('mp-player-name');
+    const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
+    MP.send({ type: 'join', name: name, platform: isMobile ? 'mobile' : 'pc', force: true, _sender: MP.playerId });
+  };
 
 })();
