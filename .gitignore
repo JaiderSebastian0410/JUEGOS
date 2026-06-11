@@ -6,3 +6,6 @@ Thumbs.db
 .env
 .system_generated/
 /tmp/
+*.apk
+*.exe
+dist-electron/

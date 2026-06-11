@@ -1,0 +1,31 @@
+{
+  "name": "juegos-main",
+  "version": "1.0.0",
+  "description": "",
+  "main": "game.js",
+  "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "ws": "^8.20.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "build": "if not exist www mkdir www && copy /y juego.html www\\index.html && copy /y *.css www\\ && copy /y *.js www\\ && copy /y *.png www\\ && copy /y *.svg www\\ && copy /y manifest.json www\\"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JaiderSebastian0410/JUEGOS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/JaiderSebastian0410/JUEGOS/issues"
+  },
+  "homepage": "https://github.com/JaiderSebastian0410/JUEGOS#readme",
+  "devDependencies": {
+    "@capacitor/cli": "^8.3.4"
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SpaceDefender</string>
+    <string name="title_activity_main">SpaceDefender</string>
+    <string name="package_name">com.space.defender</string>
+    <string name="custom_url_scheme">com.space.defender</string>
+</resources>

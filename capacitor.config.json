@@ -1,0 +1,6 @@
+{
+  "appId": "com.space.defender",
+  "appName": "SpaceDefender",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}

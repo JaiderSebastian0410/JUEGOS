@@ -1,0 +1,43 @@
+{
+  "name": "space-defender-pro",
+  "version": "1.0.0",
+  "description": "Space Defender Pro - Ultimate Edition",
+  "main": "electron/main.js",
+  "author": "Space Defender Team",
+  "license": "MIT",
+  "scripts": {
+    "electron:start": "electron .",
+    "electron:build": "electron-builder --win portable",
+    "electron:build-installer": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.space.defender.pro",
+    "productName": "Space Defender Pro",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "juego.html",
+      "styles.css",
+      "game.js",
+      "sw.js",
+      "manifest.json",
+      "favicon.svg",
+      "icon-192.png",
+      "icon-512.png",
+      "*.png",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "icon-512.png"
+    },
+    "portable": {
+      "artifactName": "SpaceDefenderPro.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.2.1",
+    "electron-builder": "^26.0.12"
+  }
+}
