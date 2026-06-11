@@ -223,6 +223,8 @@
      GAME STATE
      ========================================================= */
   let gameState = 'MENU'; // MENU | PLAYING | CHOOSING | GAMEOVER
+  let gamesPlayedSession = 0; // Counter for interstitial ads (every 4 games)
+  let hasRevivedThisGame = false; // Only allow 1 revive per game
 
   const player = {
     x: WORLD.WIDTH / 2,
@@ -1268,7 +1270,9 @@
 
           if (b.source === 'manual' || b.source === 'auto') {
             if (Math.abs(b.x - e.x) < e.size && Math.abs(b.y - e.y) < e.size) {
-              MP.send({ type: 'enemy_hit', eid: e.eid, hp: e.hp - 1, hx: b.x, hy: b.y });
+              e.hp--; // Decrement locally for immediate feedback
+              e._lastHitTime = performance.now(); // Mark so enemy_sync won't overwrite
+              MP.send({ type: 'enemy_hit', eid: e.eid, hp: e.hp, hx: b.x, hy: b.y });
               createParticles(b.x, b.y, '#ffffff', 4);
               SFX.hit();
               bullets.splice(i, 1);
@@ -1320,15 +1324,22 @@
     const maxDistSq = 2500 * 2500; // Cull enemies too far away to prevent ghost accumulation lag
 
     for (const e of enemies) {
-      // In MP mode, find the nearest player (local or remote) to chase
+      // In MP mode, find the nearest ALIVE player (local or remote) to chase
       let targetX = player.x, targetY = player.y;
+      let hasAliveTarget = player.vida > 0; // FIX: skip dead local player
       if (MP.isMultiplayer) {
-        let bestDist = (player.x - e.x) * (player.x - e.x) + (player.y - e.y) * (player.y - e.y);
+        let bestDist = hasAliveTarget ? (player.x - e.x) * (player.x - e.x) + (player.y - e.y) * (player.y - e.y) : Infinity;
         for (const [, rp] of MP.remotePlayers) {
           if (rp.vida <= 0) continue;
           const rdx = rp.targetX - e.x, rdy = rp.targetY - e.y;
           const rd = rdx * rdx + rdy * rdy;
-          if (rd < bestDist) { bestDist = rd; targetX = rp.targetX; targetY = rp.targetY; }
+          if (rd < bestDist) { bestDist = rd; targetX = rp.targetX; targetY = rp.targetY; hasAliveTarget = true; }
+        }
+        // FIX: If no alive target, enemy wanders randomly instead of piling up
+        if (!hasAliveTarget) {
+          const wanderAngle = (e.eid || 0) * 0.618 + frame * 0.005;
+          targetX = WORLD.WIDTH / 2 + Math.cos(wanderAngle) * 1500;
+          targetY = WORLD.HEIGHT / 2 + Math.sin(wanderAngle) * 1500;
         }
       }
 
@@ -1339,8 +1350,11 @@
       // Distance culling - in MP check if far from ALL players
       if (MP.isMultiplayer) {
         let closeToAny = false;
-        const localDsq = (player.x - e.x) * (player.x - e.x) + (player.y - e.y) * (player.y - e.y);
-        if (localDsq < maxDistSq) closeToAny = true;
+        // FIX: Only check distance to local player if alive
+        if (player.vida > 0) {
+          const localDsq = (player.x - e.x) * (player.x - e.x) + (player.y - e.y) * (player.y - e.y);
+          if (localDsq < maxDistSq) closeToAny = true;
+        }
         if (!closeToAny) {
           for (const [, rp] of MP.remotePlayers) {
             if (rp.vida <= 0) continue;
@@ -2553,10 +2567,16 @@
       if (vLabel) vLabel.innerText = Math.round(masterVolume * 100) + '%';
       
       $('pause-menu').classList.add('active');
+      
+      // Show banner ads on pause (Capacitor/Android only)
+      AdManager.showBanners();
     } else {
       $('pause-menu').classList.remove('active');
       gameState = 'PLAYING';
       if (!animationId) animationId = requestAnimationFrame(gameLoop);
+      
+      // Hide banner ads on resume
+      AdManager.hideBanners();
     }
   };
 
@@ -2609,6 +2629,7 @@
     kills = 0; killsMilestone = 0;
     time = 0; frame = 0;
     ultraEnergy = 0;
+    hasRevivedThisGame = false; // Reset revive flag for new game
     // Release pooled enemies
     for (let i = 0; i < enemies.length; i++) EnemyPool.release(enemies[i]);
     bullets = []; enemies = []; powerUps = []; hearts = [];
@@ -2707,6 +2728,9 @@
     $('game-over-menu').classList.add('active');
     $('pause-btn').style.display = 'none';
     
+    // Increment session game counter for interstitial ads
+    gamesPlayedSession++;
+    
     const records = Storage.load(selectedDifficulty);
     records.gamesPlayed++;
     const currentAvg = kills > 0 ? parseFloat((score / kills).toFixed(1)) : 0;
@@ -2748,6 +2772,16 @@
     // Reset Retry Button UI Just in case
     const retryBtn = $('retry-btn');
     if (retryBtn) { retryBtn.innerText = 'Reintentar'; retryBtn.style.background = ''; }
+    
+    // Show/hide revive button (only if not practice, not multiplayer, not already revived)
+    const reviveBtn = $('revive-btn');
+    if (reviveBtn) {
+      if (!isPractice && !MP.isMultiplayer && !hasRevivedThisGame && AdManager.isAvailable()) {
+        reviveBtn.style.display = 'inline-block';
+      } else {
+        reviveBtn.style.display = 'none';
+      }
+    }
 
     const body = $('records-body');
     body.innerHTML = '';
@@ -2757,6 +2791,11 @@
       row.innerHTML = `<td>${res.label}</td><td>${res.current}</td><td class="${res.isNew ? 'highlight-record' : ''}">${displayBest}</td>`;
       body.appendChild(row);
     });
+    
+    // Show interstitial ad every 5 games (excluding multiplayer)
+    if (!MP.isMultiplayer && gamesPlayedSession > 0 && gamesPlayedSession % 5 === 0) {
+      AdManager.showInterstitial();
+    }
   }
 
   window.retryGame = function() {
@@ -3163,13 +3202,16 @@
             if (wRoom) wRoom.innerText = msg.roomPlatform === 'pc' ? 'PC' : 'Móvil';
             if (wMy) wMy.innerText = isMobile ? 'Móvil' : 'PC';
             if (wMenu) wMenu.classList.add('active');
-            this.activeProtocol = msg.protocol;
+            // FIX: Store protocol but do NOT mark as connected yet.
+            // connected stays false until room_joined is received.
+            this._pendingProtocol = msg.protocol;
             return;
         }
 
         if (msg.type === 'room_joined' && msg.targetId === this.playerId) {
-           if (!this.activeProtocol) {
-              this.activeProtocol = msg.protocol;
+           // FIX: Accept room_joined even if activeProtocol was set by platform_warning
+           if (!this.connected) {
+              this.activeProtocol = msg.protocol || this._pendingProtocol || this.activeProtocol;
               this.connected = true;
               msg.playerId = this.playerId; 
               this.onMessage(msg);
@@ -3177,7 +3219,8 @@
               if (this.activeProtocol === 'mqtt' && this.peer) { this.peer.destroy(); this.peer = null; }
               if (this.activeProtocol === 'peerjs' && this.clientMQTT) { this.clientMQTT.end(); this.clientMQTT = null; }
            }
-        } else if (this.activeProtocol) {
+        } else if (this.activeProtocol || this._pendingProtocol) {
+           if (!this.activeProtocol) this.activeProtocol = this._pendingProtocol;
            this.onMessage(msg);
         }
       }
@@ -3646,7 +3689,11 @@
             e._lastSyncTime = performance.now();
             // Smooth interpolation: store target, animate toward it each frame
             e._targetX = b.x; e._targetY = b.y;
-            e.hp = b.hp;
+            // FIX: Don't overwrite HP if enemy was recently hit locally (prevents "immortal enemies" bug)
+            // If the client hit this enemy within the last 800ms, trust the local HP value
+            if (!e._lastHitTime || (performance.now() - e._lastHitTime > 800)) {
+              e.hp = b.hp;
+            }
             if (b.angle !== undefined) e._targetAngle = b.angle;
             // Initialize current pos if first sync
             if (e._syncInit === undefined) {
@@ -3867,7 +3914,261 @@
     if (m) m.classList.remove('active');
     const nameEl = document.getElementById('mp-player-name');
     const name = (nameEl ? nameEl.value.trim() : '') || 'Piloto';
-    MP.send({ type: 'join', name: name, platform: isMobile ? 'mobile' : 'pc', force: true, _sender: MP.playerId });
+    // FIX: MP.send() requires connected=true which hasn't been set yet.
+    // Send the force-join directly via the raw transport.
+    const joinMsg = { type: 'join', name: name, platform: isMobile ? 'mobile' : 'pc', force: true, _sender: MP.playerId };
+    if (MP.activeProtocol === 'mqtt' && MP.clientMQTT) {
+      MP.clientMQTT.publish('sdpro/' + MP.roomId + '/host', JSON.stringify(joinMsg));
+    } else if (MP.activeProtocol === 'peerjs' && MP.hostConn && MP.hostConn.open) {
+      MP.hostConn.send(joinMsg);
+    } else {
+      // Fallback: try both
+      if (MP.clientMQTT) MP.clientMQTT.publish('sdpro/' + MP.roomId + '/host', JSON.stringify(joinMsg));
+      if (MP.hostConn && MP.hostConn.open) MP.hostConn.send(joinMsg);
+    }
+  };
+
+  /* =========================================================
+     MOBILE CONTROLS SIDE TOGGLE (Derecha / Izquierda)
+     ========================================================= */
+  window.toggleControlsSide = function(side) {
+    const mc = document.getElementById('mobile-controls');
+    if (!mc) return;
+    if (side === 'left') {
+      mc.classList.add('controls-left');
+    } else {
+      mc.classList.remove('controls-left');
+    }
+    try { localStorage.setItem('sdpro_controls_side', side); } catch(e) {}
+  };
+
+  // Cargar preferencia guardada al iniciar
+  (function loadControlsSidePref() {
+    try {
+      const saved = localStorage.getItem('sdpro_controls_side');
+      if (saved) {
+        const mc = document.getElementById('mobile-controls');
+        const sel = document.getElementById('pause-controls-side');
+        if (mc && saved === 'left') mc.classList.add('controls-left');
+        if (sel) sel.value = saved;
+      }
+    } catch(e) {}
+  })();
+
+  /* =========================================================
+     ADMOB AD MANAGER (Capacitor Native Only)
+     Uses @capacitor-community/admob plugin.
+     Falls back gracefully to no-ops when running in browser/Electron.
+     ========================================================= */
+  const AdManager = {
+    _initialized: false,
+    _admob: null,
+    _rewardedReady: false,
+    _interstitialReady: false,
+    _bannerVisible: false,
+
+    // ── AdMob Ad Unit IDs ──
+    // Usa IDs de prueba para desarrollo, reemplaza con IDs reales para producción
+    // Para obtener IDs reales: https://admob.google.com → Aplicaciones → Bloques de anuncios
+    BANNER_ID: 'ca-app-pub-3940256099942544/6300978111',          // Test Banner
+    INTERSTITIAL_ID: 'ca-app-pub-3940256099942544/1033173712',    // Test Interstitial
+    REWARDED_ID: 'ca-app-pub-3940256099942544/5224354917',        // Test Rewarded
+
+    async init() {
+      // Only initialize in Capacitor environment (Android/iOS)
+      if (typeof window.Capacitor === 'undefined' || !window.Capacitor.isNativePlatform()) {
+        console.log('[AdManager] Not running in Capacitor, ads disabled.');
+        return;
+      }
+
+      try {
+        // Dynamic import of the AdMob plugin
+        const { AdMob, BannerAdSize, BannerAdPosition, AdmobConsentStatus } = await import('@capacitor-community/admob');
+        this._admob = AdMob;
+
+        await AdMob.initialize({
+          // TODO: Set to false for production
+          testingDevices: [],
+          initializeForTesting: true,
+        });
+
+        this._initialized = true;
+        console.log('[AdManager] AdMob initialized successfully.');
+
+        // Pre-load ads
+        this.prepareInterstitial();
+        this.prepareRewarded();
+
+        // Listen for rewarded ad events
+        AdMob.addListener('onRewardedVideoAdLoaded', () => {
+          this._rewardedReady = true;
+          console.log('[AdManager] Rewarded ad loaded.');
+        });
+        AdMob.addListener('onRewardedVideoAdFailedToLoad', () => {
+          this._rewardedReady = false;
+          console.log('[AdManager] Rewarded ad failed to load, retrying in 30s...');
+          setTimeout(() => this.prepareRewarded(), 30000);
+        });
+
+        // Listen for interstitial events
+        AdMob.addListener('onInterstitialAdLoaded', () => {
+          this._interstitialReady = true;
+        });
+        AdMob.addListener('onInterstitialAdFailedToLoad', () => {
+          this._interstitialReady = false;
+          setTimeout(() => this.prepareInterstitial(), 30000);
+        });
+        AdMob.addListener('onInterstitialAdDismissed', () => {
+          this._interstitialReady = false;
+          this.prepareInterstitial();
+        });
+
+      } catch (e) {
+        console.warn('[AdManager] Failed to initialize AdMob:', e);
+      }
+    },
+
+    async showBanners() {
+      if (!this._initialized || !this._admob || this._bannerVisible) return;
+      try {
+        await this._admob.showBanner({
+          adId: this.BANNER_ID,
+          adSize: 'BANNER',
+          position: 'BOTTOM_CENTER',  // FIX: Banner fijo en parte inferior de la pausa
+          margin: 0,
+        });
+        this._bannerVisible = true;
+      } catch (e) {
+        console.warn('[AdManager] Banner show error:', e);
+      }
+      // PC: show HTML lateral banners (Electron/browser fallback)
+      AdManager.showPCBanners();
+    },
+
+    showPCBanners() {
+      if (isMobile) return;
+      const left = document.getElementById('pc-ad-banner-left');
+      const right = document.getElementById('pc-ad-banner-right');
+      if (left) left.classList.add('visible');
+      if (right) right.classList.add('visible');
+    },
+
+    hidePCBanners() {
+      const left = document.getElementById('pc-ad-banner-left');
+      const right = document.getElementById('pc-ad-banner-right');
+      if (left) left.classList.remove('visible');
+      if (right) right.classList.remove('visible');
+    },
+
+    async hideBanners() {
+      // Hide PC banners always
+      AdManager.hidePCBanners();
+      if (!this._initialized || !this._admob || !this._bannerVisible) return;
+      try {
+        await this._admob.hideBanner();
+        await this._admob.removeBanner();
+        this._bannerVisible = false;
+      } catch (e) {
+        console.warn('[AdManager] Banner hide error:', e);
+      }
+    },
+
+    async prepareInterstitial() {
+      if (!this._initialized || !this._admob) return;
+      try {
+        await this._admob.prepareInterstitial({ adId: this.INTERSTITIAL_ID });
+      } catch (e) {
+        console.warn('[AdManager] Interstitial prepare error:', e);
+      }
+    },
+
+    async showInterstitial() {
+      if (!this._initialized || !this._admob || !this._interstitialReady) return;
+      try {
+        await this._admob.showInterstitial();
+      } catch (e) {
+        console.warn('[AdManager] Interstitial show error:', e);
+      }
+    },
+
+    async prepareRewarded() {
+      if (!this._initialized || !this._admob) return;
+      try {
+        await this._admob.prepareRewardVideoAd({ adId: this.REWARDED_ID });
+      } catch (e) {
+        console.warn('[AdManager] Rewarded prepare error:', e);
+      }
+    },
+
+    async showRewarded() {
+      if (!this._initialized || !this._admob || !this._rewardedReady) return false;
+      try {
+        const result = await this._admob.showRewardVideoAd();
+        this._rewardedReady = false;
+        this.prepareRewarded(); // Pre-load next one
+        return true; // User completed the ad
+      } catch (e) {
+        console.warn('[AdManager] Rewarded show error:', e);
+        this._rewardedReady = false;
+        this.prepareRewarded();
+        return false;
+      }
+    },
+
+    isAvailable() {
+      // Returns true if a rewarded ad is ready OR if we're in Capacitor (ad might load soon)
+      if (!this._initialized) return false;
+      return this._rewardedReady;
+    }
+  };
+
+  // Initialize AdManager on page load
+  AdManager.init();
+
+  /* =========================================================
+     REVIVE WITH AD
+     ========================================================= */
+  window.reviveWithAd = async function() {
+    if (hasRevivedThisGame || isPractice || MP.isMultiplayer) return;
+    
+    const reviveBtn = $('revive-btn');
+    if (reviveBtn) {
+      reviveBtn.innerText = '⏳ Cargando anuncio...';
+      reviveBtn.style.pointerEvents = 'none';
+    }
+    
+    const success = await AdManager.showRewarded();
+    
+    if (success) {
+      // Revive the player with 2 lives
+      hasRevivedThisGame = true;
+      player.vida = 2;
+      gameState = 'PLAYING';
+      
+      // Close game over menu
+      $('game-over-menu').classList.remove('active');
+      $('pause-btn').style.display = 'block';
+      
+      // Give brief invulnerability after revive
+      player.powers.shield = 180; // 3 seconds of shield
+      
+      // Visual feedback
+      createParticles(player.x, player.y, '#f1c40f', 50);
+      createFloatingText(player.x, player.y, '❤❤ ¡REVIVIDO!', '#f1c40f');
+      SFX.powerup();
+      showAnnouncement('🎬 ¡REVIVIDO CON 2 VIDAS! 🎬');
+      
+      // Resume game loop
+      if (!animationId) animationId = requestAnimationFrame(gameLoop);
+    } else {
+      // Ad failed or wasn't available
+      if (reviveBtn) {
+        reviveBtn.innerText = '❌ Anuncio no disponible';
+        setTimeout(() => {
+          reviveBtn.style.display = 'none';
+        }, 2000);
+      }
+    }
   };
 
 })();

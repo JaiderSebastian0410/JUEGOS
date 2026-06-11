@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Space Defender Pro - Ultimate Edition</title>
   <meta name="description" content="¡Defiende la frontera galáctica! Simulador de combate espacial con enemigos de élite, poderes tácticos y dificultad progresiva.">
   <meta name="theme-color" content="#050510">
@@ -231,6 +231,9 @@
       <tbody id="records-body"></tbody>
     </table>
     <div class="btn-group" style="margin-top: 20px;">
+      <button id="revive-btn" class="btn" style="min-width: 200px; display: none; border-color: #f1c40f; color: #f1c40f; background: rgba(241,196,15,0.08); animation: pulse 1s infinite alternate;" onclick="reviveWithAd()">
+        🎬 Revivir viendo anuncio
+      </button>
       <button id="retry-btn" class="btn" style="min-width: 150px;" onclick="retryGame()">Reintentar</button>
       <button class="btn secondary" style="min-width: 150px; border-color: #ff3366; color: #ff3366;" onclick="exitGame()">Volver al Menú</button>
     </div>
@@ -266,6 +269,14 @@
           <span>Volumen: <span id="pause-vol-label" style="color:cyan;">100%</span></span>
           <input type="range" id="pause-volume-slider" min="0" max="1" step="0.1" value="1" onchange="updateVolume(this.value); document.getElementById('volume-slider').value = this.value;" oninput="document.getElementById('pause-vol-label').innerText = Math.round(this.value * 100) + '%'; document.getElementById('vol-label').innerText = Math.round(this.value * 100) + '%'">
         </label>
+        <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px;">
+           <span>🎮 Botones</span>
+           <select id="pause-controls-side" onchange="toggleControlsSide(this.value)"
+             style="padding: 6px 12px; background: rgba(0,0,0,0.5); border: 1px solid rgba(0,255,255,0.3); border-radius: 6px; color: #fff; font-family: 'Orbitron', sans-serif; font-size: 0.75rem; outline: none; cursor: pointer;">
+             <option value="right">Derecha ➡️</option>
+             <option value="left">⬅️ Izquierda</option>
+           </select>
+        </div>
       </div>
       
       <button id="end-practice-btn" class="btn secondary" style="display:none; border-color: #2ecc71; color: #2ecc71;" onclick="endPractice()">Finalizar Partida</button>
@@ -401,6 +412,26 @@
 
     <div class="btn-group" style="margin-top:20px;">
       <button class="btn secondary" onclick="closeMultiplayer()">← Volver al Menú</button>
+    </div>
+  </div>
+
+  <!-- PC Lateral Ad Banners (shown during pause on desktop) -->
+  <div id="pc-ad-banner-left" class="pc-ad-banner pc-ad-left">
+    <div class="pc-ad-inner">
+      <span class="pc-ad-label">PUBLICIDAD</span>
+      <div class="pc-ad-content">
+        <img src="icon-192.png" alt="Ad" style="width:64px; height:64px; border-radius:8px; opacity:0.7; margin-bottom:8px;">
+        <span style="font-size:0.7rem; color:#556; text-align:center;">Space Defender Pro<br>Premium Edition</span>
+      </div>
+    </div>
+  </div>
+  <div id="pc-ad-banner-right" class="pc-ad-banner pc-ad-right">
+    <div class="pc-ad-inner">
+      <span class="pc-ad-label">PUBLICIDAD</span>
+      <div class="pc-ad-content">
+        <img src="icon-192.png" alt="Ad" style="width:64px; height:64px; border-radius:8px; opacity:0.7; margin-bottom:8px;">
+        <span style="font-size:0.7rem; color:#556; text-align:center;">Apoya al<br>desarrollador</span>
+      </div>
     </div>
   </div>
 
